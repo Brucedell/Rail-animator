@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Part 6 · Vehicles and pivots</title>
+<link rel="stylesheet" href="style.css"></head>
+<body data-footer="Part 6 · Vehicles and pivots">
+
+<div class="opener">
+  <div class="part-kicker">Part 6</div>
+  <h1 class="part-title">Vehicles and pivots</h1>
+  <p class="part-lede">What a “vehicle” is in data terms. It is not a list of N identical pivots but a few distinct <b>roles</b>, together with how the body gets its position and angle, and how a rig plugs into the mechanism.</p>
+</div>
+<div class="toc-part">
+  <div>6.1 Vehicle families</div><div>6.2 Pivot roles</div>
+  <div>6.3 Where the root goes</div><div>6.4 Body orientation and the chord effect</div>
+  <div>6.5 Pivots crossing curves</div><div>6.6 Binding a rig to the pivots</div>
+  <div>6.7 Facing and running backwards</div><div>6.8 The Vehicle Definition</div>
+</div>
+
+<h2>6.1 Vehicle families</h2>
+<table>
+  <thead><tr><th style="width:24%">Family</th><th style="width:30%">Track contact</th><th>Mechanism needed</th></tr></thead>
+  <tbody>
+    <tr><td>Mine cart / tram with one truck</td><td>One short rigid wheelbase</td><td>Root only (or two axle points if the wheelbase is visible on curves)</td></tr>
+    <tr><td>Four-wheel wagon</td><td>Two axles fixed to the frame</td><td>Two <b>axle points</b>; the frame aims between them</td></tr>
+    <tr><td>Bogie coach / subway car</td><td>Two swivelling bogies</td><td>Two <b>tracked pivots</b>; the body rides on both</td></tr>
+    <tr><td>Steam locomotive (e.g. 2-4-2)</td><td>Rigid driving wheels + swinging pony/trailing trucks</td><td>Driver <b>axle points</b> set the frame; <b>radial</b> trucks swing about pins on the frame</td></tr>
+    <tr><td>Tender (two bogies)</td><td>Two bogies</td><td>Same as a bogie coach, coupled to the loco by a drawbar</td></tr>
+    <tr><td>Articulated (Mallet, Garratt, articulated tram)</td><td>Several frames hinged together</td><td>Several bodies, each a sub-vehicle. A consist with zero gap and a hinge</td></tr>
+  </tbody>
+</table>
+
+<h2>6.2 Pivot roles</h2>
+<p>The v8 pivot list treats every pivot the same (“offset in metres, own Follow Path”). That is correct for bogies but not enough for locomotives. The vehicle-architecture session already identified three roles, and adding a fourth covers everything:</p>
+<figure>
+<svg viewBox="0 0 700 280">
+  <path d="M10 220 C 200 220, 420 190, 690 60" fill="none" stroke="#2a5d9f" stroke-width="3"/>
+  <g transform="translate(90.0,218.1) rotate(-2.8)"><rect x="-22" y="-9" width="44" height="18" rx="3" fill="none" stroke="#c07a12" stroke-width="2.5"/><circle r="4" fill="#c07a12"/></g>
+  <g transform="translate(300.0,192.8) rotate(-11.1)"><line x1="0" y1="-14" x2="0" y2="14" stroke="#c07a12" stroke-width="3"/><circle r="4" fill="#c07a12"/></g>
+  <g transform="translate(360.0,179.7) rotate(-13.5)"><line x1="0" y1="-14" x2="0" y2="14" stroke="#c07a12" stroke-width="3"/><circle r="4" fill="#c07a12"/></g>
+  <line x1="300.0" y1="192.8" x2="360.0" y2="179.7" stroke="#1d232b" stroke-width="2" stroke-dasharray="4 3"/>
+  <g transform="translate(500.0,138.7) rotate(-19.0)"><line x1="0" y1="-14" x2="0" y2="14" stroke="#c07a12" stroke-width="3"/><circle r="4" fill="#c07a12"/></g>
+  <line x1="360.0" y1="179.7" x2="450.0" y2="160.0" stroke="#1d232b" stroke-width="1.5" stroke-dasharray="2 3"/>
+  <circle cx="450.0" cy="160.0" r="5" fill="#6a4aa5"/><line x1="500.0" y1="138.7" x2="450.0" y2="160.0" stroke="#6a4aa5" stroke-width="2"/>
+  <rect x="324.0" y="158.3" width="12" height="12" fill="#5b6673"/>
+  <text x="40" y="250" class="t" fill="#c07a12">TRACKED</text><text x="40" y="264" class="ts">bogie centre on rail, own heading</text>
+  <text x="250" y="244" class="t" fill="#c07a12">AXLE_POINT ×2</text><text x="250" y="258" class="ts">rigid wheelbase ends; frame aims</text><text x="250" y="270" class="ts">along the chord between them</text>
+  <text x="520" y="200" class="t" fill="#c07a12">RADIAL</text><text x="520" y="214" class="ts">axle on rail, swings about a</text><text x="520" y="226" class="ts">pin on the frame (radius arm)</text>
+  <text x="120" y="130" class="t" fill="#5b6673">RIGID_MOUNT</text><text x="120" y="144" class="ts">fixed on the frame, no curve</text><text x="120" y="156" class="ts">(cylinders, couplers, cab)</text>
+  <line x1="200" y1="150" x2="322.0" y2="164.3" stroke="#5b6673" stroke-dasharray="2 3"/>
+  <text x="10" y="20" class="tb">One vehicle can mix all four roles</text>
+</svg>
+<figcaption><b>Figure 6.1</b> Pivot roles. Only TRACKED, AXLE_POINT and RADIAL sample the rail. RIGID_MOUNT is just a bone on the frame.</figcaption>
+</figure>
+<table>
+  <thead><tr><th style="width:16%">Role</th><th style="width:34%">Mechanism object</th><th>How its transform is found</th></tr></thead>
+  <tbody>
+    <tr><td>TRACKED</td><td>Empty + Follow Path (as today)</td><td>Route point at <i>d + offset</i>, with that point's heading and tilt.</td></tr>
+    <tr><td>AXLE_POINT</td><td>Empty + Follow Path</td><td>Same as TRACKED. Only its <b>position</b> is used; the frame's heading comes from the pair.</td></tr>
+    <tr><td>RADIAL</td><td>Empty + Follow Path (axle) + stored <code>pin_offset</code></td><td>Axle on rail; the truck bone sits at the axle and <b>Damped Tracks</b> toward the pin on the frame.</td></tr>
+    <tr><td>RIGID_MOUNT</td><td>None (bone in the rig)</td><td>Child of the frame bone.</td></tr>
+  </tbody>
+</table>
+
+<h2>6.3 Where the root goes</h2>
+<div class="grid2">
+<div class="card"><h4>Option A: root at the vehicle's centre</h4>
+<p class="small" style="color:#1d232b">The root sits midway between the two defining points (bogie centres, or the ends of the rigid wheelbase). Pivot offsets are symmetric (±). It looks natural in the viewport and matches how most models are built. Coupler positions are stored as <code>front_coupler</code> / <code>rear_coupler</code> distances in the definition.</p></div>
+<div class="card"><h4>Option B: root at the front coupler</h4>
+<p class="small" style="color:#1d232b">Consist maths becomes one running number, but every pivot offset is negative and the gizmo sits at the nose. It is awkward to author, and flipping the vehicle's facing moves the reference point.</p></div>
+</div>
+<div class="callout c-decide"><div class="tag">Recommendation</div>
+<p><b>Option A (centre), plus coupler distances in the definition.</b> The consist code computes spacing as <code>rear_coupler(car n) + gap + front_coupler(car n+1)</code>, and the user only enters the gap (often 0 when couplers touch). That keeps the “front-referenced chain” idea from session 4 without making the vehicle awkward to author.</p></div>
+
+<h2>6.4 Body orientation and the chord effect</h2>
+<p>A long car on a curve does <b>not</b> hug the rail: its body is a straight line between its two bogies, so its middle sits <b>inside</b> the curve and its ends overhang <b>outside</b>. Today's root rides the rail itself, so a mesh parented straight to the root clips through the inside of tight curves.</p>
+<figure>
+<svg viewBox="0 0 700 250">
+  <path d="M40 220 C 200 60, 500 60, 660 220" fill="none" stroke="#2a5d9f" stroke-width="3"/>
+  <circle cx="175" cy="121" r="6" fill="#c07a12"/><circle cx="525" cy="121" r="6" fill="#c07a12"/>
+  <line x1="175" y1="121" x2="525" y2="121" stroke="#1d232b" stroke-width="2"/>
+  <rect x="120" y="106" width="460" height="30" rx="4" fill="#1d232b" opacity=".12" stroke="#1d232b"/>
+  <circle cx="350" cy="121" r="6" fill="#2f7d4f"/>
+  <circle cx="350" cy="94" r="6" fill="#b3372f"/>
+  <line x1="350" y1="94" x2="350" y2="121" stroke="#5b6673" stroke-dasharray="2 2"/>
+  <text x="360" y="88" class="t" fill="#b3372f">root on the rail</text>
+  <text x="360" y="150" class="t" fill="#2f7d4f">body centre = midpoint of the bogie pivots</text>
+  <text x="360" y="166" class="ts">heading = rear pivot → front pivot</text>
+  <text x="40" y="30" class="t">The gap between them is the chord offset:  <tspan class="mono">≈ s² / (8R)</tspan></text>
+  <text x="40" y="46" class="ts">s = bogie spacing, R = curve radius. For s = 18 m, R = 150 m that is 0.27 m, easily visible.</text>
+  <text x="120" y="200" class="ts">bogie</text><text x="540" y="200" class="ts">bogie</text>
+</svg>
+<figcaption><b>Figure 6.2</b> The body should come from the <b>pivots</b>, not the root. This is also how real rail vehicles behave.</figcaption>
+</figure>
+<h3>Built with native constraints on the body bone</h3>
+<pre>BODY bone
+  Copy Location   → Pivot_Front Empty           influence 1.0
+  Copy Location   → Pivot_Rear  Empty           influence 0.5   (= midpoint of the two)
+  Damped Track    → Pivot_Front Empty  (Y)      heading along the chord
+  Copy Rotation   → Pivot_Front (roll only, mix ADD, influence 0.5)
+  Copy Rotation   → Pivot_Rear  (roll only, mix ADD, influence 0.5)   averaged banking</pre>
+<p>For a steam loco the same pattern uses the two <b>driver AXLE_POINTs</b> instead of bogies (Part 10).</p>
+
+<h2>6.5 Pivots crossing curves</h2>
+<p>The known gap (v8 §3.3): pivots are placed on the root's curve and clamp at its ends. Two ways to close it:</p>
+<table>
+  <thead><tr><th style="width:26%">Approach</th><th>How</th><th style="width:22%">When</th></tr></thead>
+  <tbody>
+    <tr><td><b>Short term</b>: reuse the wagon resolver</td><td>Call <code>_track_it_resolve_route_position(root, root_distance + pivot.offset)</code> for each pivot, exactly as <code>_track_it_sync_consist_wagons</code> already does for wagons, then set that curve's constraint to influence 1 on the pivot Empty.</td><td>Now, small change</td></tr>
+    <tr><td><b>Target</b>: the occupied path</td><td>Pivots are points on the train's occupied path (Part 5). Nothing special is needed.</td><td>Phase 3</td></tr>
+  </tbody>
+</table>
+
+<h2>6.6 Binding a rig to the pivots</h2>
+<p>The Pivot Data panel already stores <code>rig_object</code> and <code>rig_bone</code> (inert). A <b>Bind Rig</b> operator turns that into constraints on the pose bones, and <b>Unbind</b> removes exactly those constraints (tagged by name prefix <code>TI_</code>):</p>
+<figure>
+<svg viewBox="0 0 700 230">
+  <defs><marker id="v1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" fill="#5b6673"/></marker></defs>
+  <rect x="10" y="10" width="200" height="210" rx="8" fill="#fbf1df" stroke="#ecd3a6"/>
+  <text x="22" y="32" class="tb" fill="#c07a12">Mechanism (add-on)</text>
+  <g class="t"><rect x="22" y="46" width="176" height="28" rx="4" fill="#fff" stroke="#c07a12"/><text x="32" y="64">Vehicle root</text>
+  <rect x="22" y="84" width="176" height="28" rx="4" fill="#fff" stroke="#c07a12"/><text x="32" y="102">Pivot_Front (TRACKED)</text>
+  <rect x="22" y="122" width="176" height="28" rx="4" fill="#fff" stroke="#c07a12"/><text x="32" y="140">Pivot_Rear (TRACKED)</text>
+  <rect x="22" y="160" width="176" height="28" rx="4" fill="#fff" stroke="#c07a12"/><text x="32" y="178">route distance d</text></g>
+  <rect x="490" y="10" width="200" height="210" rx="8" fill="#eee8f8" stroke="#d2c6ea"/>
+  <text x="502" y="32" class="tb" fill="#6a4aa5">Rig (armature)</text>
+  <g class="t"><rect x="502" y="46" width="176" height="28" rx="4" fill="#fff" stroke="#6a4aa5"/><text x="512" y="64">ROOT (follows root)</text>
+  <rect x="502" y="84" width="176" height="28" rx="4" fill="#fff" stroke="#6a4aa5"/><text x="512" y="102">BOGIE_F</text>
+  <rect x="502" y="122" width="176" height="28" rx="4" fill="#fff" stroke="#6a4aa5"/><text x="512" y="140">BOGIE_R</text>
+  <rect x="502" y="160" width="176" height="28" rx="4" fill="#fff" stroke="#6a4aa5"/><text x="512" y="178">WHEEL_* (rotation)</text></g>
+  <g class="ts">
+  <line x1="198" y1="60" x2="500" y2="60" stroke="#5b6673" marker-end="url(#v1)"/><text x="290" y="54">TI_CopyTransforms</text>
+  <line x1="198" y1="98" x2="500" y2="98" stroke="#5b6673" marker-end="url(#v1)"/><text x="290" y="92">TI_CopyTransforms</text>
+  <line x1="198" y1="136" x2="500" y2="136" stroke="#5b6673" marker-end="url(#v1)"/><text x="290" y="130">TI_CopyTransforms</text>
+  <line x1="198" y1="174" x2="500" y2="174" stroke="#5b6673" marker-end="url(#v1)"/><text x="290" y="168">TI_Driver (angle = d / r)</text>
+  </g>
+</svg>
+<figcaption><b>Figure 6.3</b> Binding is one-way (mechanism → rig) and fully removable. The artist's own constraints and keys on the rig are never touched.</figcaption>
+</figure>
+<div class="callout c-warn"><div class="tag">Bone vs object</div>
+<p>Pivot Empties should be <b>hidden and unselectable</b> in finished assets (the earlier plan), so nobody grabs them by accident. The Pivot Data panel keeps a “Show mechanism” eye toggle for debugging.</p></div>
+
+<h2>6.7 Facing and running backwards</h2>
+<p>A locomotive can run tender-first, and a coach can be turned end for end. Add a per-vehicle <b>facing</b> (+1 / −1):</p>
+<ul>
+  <li>Pivot offsets and coupler ends are multiplied by facing when placing points.</li>
+  <li>Follow Path on the root and pivots uses <code>forward_axis = 'FORWARD_Y'</code> when facing = +1 and <code>'TRACK_NEGATIVE_Y'</code> when −1, so the model turns 180° with no rig change.</li>
+  <li>Wheel rotation sign flips automatically, because it is computed from distance × facing.</li>
+  <li>This is the “direction flipping system” saved for later in session 5. It is a small addition once pivots are role-based.</li>
+</ul>
+
+<h2>6.8 The Vehicle Definition</h2>
+<p>Everything above that describes the <i>model</i> (not its current position) belongs in a definition saved with the asset:</p>
+<pre>VehicleDef "LNER_242T_Proto"
+  type: LOCOMOTIVE          length_over_couplers: 11.80 m
+  front_coupler: +5.90 m    rear_coupler: -5.90 m      facing_default: +1
+  pivots:
+    LEAD_TRUCK   role RADIAL      offset +3.95  pin_offset +2.60  bone TRUCK_F
+    DRIVER_1     role AXLE_POINT  offset +1.05                    bone AXLE_D1
+    DRIVER_2     role AXLE_POINT  offset -1.05                    bone AXLE_D2
+    TRAIL_TRUCK  role RADIAL      offset -3.95  pin_offset -2.60  bone TRUCK_R
+  frame: aims DRIVER_2 → DRIVER_1, bone FRAME
+  wheel_groups:
+    drivers   bones [WHL_D1_L, WHL_D1_R, WHL_D2_L, WHL_D2_R]  diameter 1.73 m  mode AUTO
+    trucks    bones [WHL_F_L, WHL_F_R, WHL_T_L, WHL_T_R]      diameter 0.97 m  mode AUTO
+  secondary: sway 0.4, hunting 0.2, bounce 0.3, joint_spacing 18.3 m</pre>
+<p class="small">Numbers are illustrative (Part 10 works through a real layout). Stored as a JSON string property on the asset's root object, with a matching PropertyGroup for editing in the UI.</p>
+</body></html>

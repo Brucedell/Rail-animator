@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Part 9 · Asset workflow</title>
+<link rel="stylesheet" href="style.css"></head>
+<body data-footer="Part 9 · Asset workflow">
+
+<div class="opener">
+  <div class="part-kicker">Part 9 · Workflow</div>
+  <h1 class="part-title">From unrigged model to Track It asset</h1>
+  <p class="part-lede">A step-by-step walkthrough of taking a plain, unrigged model (here a <b>four-wheel mine cart</b>) and turning it into a library vehicle you can drop onto any track, couple into a train, and animate. The steps marked <span class="pill p-todo">Tool</span> are proposed add-on features; everything else can be done by hand today.</p>
+</div>
+
+<h2>9.1 The whole journey</h2>
+<figure>
+<svg viewBox="0 0 700 250">
+  <defs><marker id="f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" fill="#5b6673"/></marker></defs>
+  <g class="t">
+  <rect x="10" y="20" width="120" height="56" rx="6" fill="#f4f6f9" stroke="#d5dbe2"/><text x="20" y="42" font-weight="bold">1 Prepare</text><text x="20" y="60" class="ts">scale · axes · apply</text>
+  <rect x="150" y="20" width="120" height="56" rx="6" fill="#f4f6f9" stroke="#d5dbe2"/><text x="160" y="42" font-weight="bold">2 Split parts</text><text x="160" y="60" class="ts">body · wheels · origins</text>
+  <rect x="290" y="20" width="120" height="56" rx="6" fill="#f4f6f9" stroke="#d5dbe2"/><text x="300" y="42" font-weight="bold">3 Measure</text><text x="300" y="60" class="ts">axles · Ø · couplers</text>
+  <rect x="430" y="20" width="120" height="56" rx="6" fill="#fbf1df" stroke="#ecd3a6"/><text x="440" y="42" font-weight="bold">4 Make Vehicle</text><text x="440" y="60" class="ts">root + pivots</text>
+  <rect x="570" y="20" width="120" height="56" rx="6" fill="#eee8f8" stroke="#d2c6ea"/><text x="580" y="42" font-weight="bold">5 Rig</text><text x="580" y="60" class="ts">template armature</text>
+  <rect x="570" y="120" width="120" height="56" rx="6" fill="#eee8f8" stroke="#d2c6ea"/><text x="580" y="142" font-weight="bold">6 Bind meshes</text><text x="580" y="160" class="ts">parts → bones</text>
+  <rect x="430" y="120" width="120" height="56" rx="6" fill="#eee8f8" stroke="#d2c6ea"/><text x="440" y="142" font-weight="bold">7 Wheels</text><text x="440" y="160" class="ts">groups · Auto mode</text>
+  <rect x="290" y="120" width="120" height="56" rx="6" fill="#fbf1df" stroke="#ecd3a6"/><text x="300" y="142" font-weight="bold">8 Bind Rig</text><text x="300" y="160" class="ts">mechanism → rig</text>
+  <rect x="150" y="120" width="120" height="56" rx="6" fill="#e3ecf8" stroke="#b9cde8"/><text x="160" y="142" font-weight="bold">9 Test drive</text><text x="160" y="160" class="ts">test track checks</text>
+  <rect x="10" y="120" width="120" height="56" rx="6" fill="#e4f3ea" stroke="#b7dcc5"/><text x="20" y="142" font-weight="bold">10 Publish</text><text x="20" y="160" class="ts">mark as asset</text>
+  <rect x="10" y="200" width="680" height="40" rx="6" fill="#e4f3ea" stroke="#b7dcc5"/><text x="22" y="224" font-weight="bold">11 Use: drag in from the Asset Browser → auto-attach to track → add to a consist → animate</text>
+  </g>
+  <g stroke="#5b6673" fill="none">
+  <line x1="130" y1="48" x2="148" y2="48" marker-end="url(#f1)"/><line x1="270" y1="48" x2="288" y2="48" marker-end="url(#f1)"/><line x1="410" y1="48" x2="428" y2="48" marker-end="url(#f1)"/><line x1="550" y1="48" x2="568" y2="48" marker-end="url(#f1)"/>
+  <line x1="630" y1="76" x2="630" y2="118" marker-end="url(#f1)"/><line x1="570" y1="148" x2="552" y2="148" marker-end="url(#f1)"/><line x1="430" y1="148" x2="412" y2="148" marker-end="url(#f1)"/><line x1="290" y1="148" x2="272" y2="148" marker-end="url(#f1)"/><line x1="150" y1="148" x2="132" y2="148" marker-end="url(#f1)"/>
+  <line x1="70" y1="176" x2="70" y2="198" marker-end="url(#f1)"/></g>
+</svg>
+<figcaption><b>Figure 9.1</b> Colour follows the layer key: grey = model prep, amber = mechanism, violet = rig, blue = track, green = library.</figcaption>
+</figure>
+
+<h2>9.2 Step by step</h2>
+<ol class="steps">
+<li><h4>Prepare the model</h4>
+<ul>
+  <li><b>Real-world scale in metres.</b> Check a known dimension (a mine cart's gauge is roughly 0.6 m; standard gauge is 1.435 m). Wheel rotation and cant maths depend on it.</li>
+  <li><b>Orientation:</b> front of the vehicle toward <b>+Y</b>, up <b>+Z</b>. This matches Follow Path's <code>FORWARD_Y / UP_Z</code>, which Track It always uses.</li>
+  <li><b>Apply</b> rotation and scale on every part (Ctrl+A). Leftover object scale breaks bone placement and wheel diameters.</li>
+  <li><b>Rail-top origin:</b> the model should sit so its wheel treads touch Z = 0. That plane is where the curve will be.</li>
+</ul>
+<figure><svg viewBox="0 0 640 150">
+  <line x1="20" y1="120" x2="620" y2="120" stroke="#2a5d9f" stroke-width="2"/><text x="520" y="138" class="ts">Z = 0 = rail top</text>
+  <rect x="200" y="50" width="220" height="50" rx="6" fill="#5b6673"/>
+  <circle cx="250" cy="105" r="15" fill="none" stroke="#1d232b" stroke-width="3"/><circle cx="370" cy="105" r="15" fill="none" stroke="#1d232b" stroke-width="3"/>
+  <defs><marker id="f2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="context-stroke"/></marker></defs>
+  <line x1="310" y1="120" x2="480" y2="120" stroke="#2f7d4f" stroke-width="3" marker-end="url(#f2)"/><text x="486" y="112" class="t" fill="#2f7d4f">+Y front</text>
+  <line x1="310" y1="120" x2="310" y2="20" stroke="#6a4aa5" stroke-width="3" marker-end="url(#f2)"/><text x="318" y="24" class="t" fill="#6a4aa5">+Z up</text>
+  <circle cx="310" cy="120" r="5" fill="#c07a12"/><text x="150" y="145" class="ts">origin: centre, at rail top (side view)</text>
+</svg></figure></li>
+
+<li><h4>Split into parts and set their origins</h4>
+<p>Each thing that moves on its own must be its own object, with its <b>origin at its rotation centre</b>:</p>
+<table>
+  <thead><tr><th style="width:28%">Part</th><th style="width:36%">Origin at</th><th>Name (convention)</th></tr></thead>
+  <tbody>
+    <tr><td>Body / tub</td><td>vehicle centre, rail top</td><td><code>MC_Body</code></td></tr>
+    <tr><td>Each wheelset (or wheel)</td><td>axle centre</td><td><code>MC_Wheel_F</code>, <code>MC_Wheel_R</code> (or <code>_F_L</code>, <code>_F_R</code>)</td></tr>
+    <tr><td>Frame / chassis</td><td>vehicle centre</td><td><code>MC_Frame</code></td></tr>
+    <tr><td>Couplers, doors, tipping hinge…</td><td>their hinge</td><td><code>MC_Coupler_F</code>, <code>MC_Door</code></td></tr>
+  </tbody>
+</table>
+<p class="small">Tip: in Edit Mode select the axle's edge loop, Shift+S → Cursor to Selected, then in Object Mode use Set Origin → Origin to 3D Cursor. These are the same manual steps the early sessions used.</p></li>
+
+<li><h4>Measure <span class="pill p-todo">Tool: Measure Vehicle</span></h4>
+<p>With the parts named, a <b>Measure Vehicle</b> operator can read everything from bounding boxes: axle Y positions (from wheel origins), wheel diameters (bounding-box height), overall length, and coupler tips (the furthest ±Y points of the coupler objects). By hand, read each wheel's Location Y and Dimensions Z in the N-panel.</p>
+<pre>Mine cart (example)     axle F  +0.45 m   axle R  -0.45 m   wheel Ø 0.36 m
+                        front coupler +0.95 m   rear coupler -0.95 m   length 1.90 m</pre></li>
+
+<li><h4>Make Vehicle <span class="pill p-todo">Tool: wizard</span></h4>
+<p>Select all the parts and run <b>Make Vehicle</b>, then pick a template:</p>
+<table>
+  <thead><tr><th style="width:26%">Template</th><th>Creates</th></tr></thead>
+  <tbody>
+    <tr><td>Rigid 2-axle (mine cart, wagon)</td><td>Root + 2 AXLE_POINT pivots at the measured axle offsets</td></tr>
+    <tr><td>Bogie car</td><td>Root + 2 TRACKED pivots at the bogie centres</td></tr>
+    <tr><td>Steam loco (Whyte n-n-n)</td><td>Root + drivers as AXLE_POINTs + RADIAL trucks (Part 10)</td></tr>
+    <tr><td>Custom</td><td>Root only. Add pivots by hand, as in today's Vehicle box</td></tr>
+  </tbody>
+</table>
+<p>Today's equivalent is to add an Empty (or cylinder) as root at the vehicle origin, then use Vehicle → <b>+</b> twice with offsets <b>+0.45</b> and <b>−0.45</b>.</p></li>
+
+<li><h4>Generate the control rig <span class="pill p-todo">Tool</span></h4>
+<p>The template builds an armature with standard bone names, placed at the part origins:</p>
+<figure><svg viewBox="0 0 640 190">
+  <g class="t">
+  <rect x="10" y="10" width="150" height="26" rx="4" fill="#eee8f8" stroke="#6a4aa5"/><text x="20" y="28">MC_Rig (armature)</text>
+  <rect x="40" y="46" width="150" height="26" rx="4" fill="#fff" stroke="#6a4aa5"/><text x="50" y="64">ROOT</text>
+  <rect x="70" y="82" width="150" height="26" rx="4" fill="#fff" stroke="#6a4aa5"/><text x="80" y="100">FRAME  (aims R→F)</text>
+  <rect x="100" y="118" width="150" height="26" rx="4" fill="#fff" stroke="#6a4aa5"/><text x="110" y="136">BODY  (+ FX_Body)</text>
+  <rect x="280" y="82" width="150" height="26" rx="4" fill="#fff" stroke="#6a4aa5"/><text x="290" y="100">AXLE_F → WHL_F</text>
+  <rect x="280" y="118" width="150" height="26" rx="4" fill="#fff" stroke="#6a4aa5"/><text x="290" y="136">AXLE_R → WHL_R</text>
+  <rect x="280" y="154" width="150" height="26" rx="4" fill="#fff" stroke="#6a4aa5"/><text x="290" y="172">CPL_F, CPL_R</text>
+  </g>
+  <g stroke="#6a4aa5" fill="none"><path d="M30 36 V59 H40"/><path d="M60 72 V95 H70"/><path d="M90 108 V131 H100"/><path d="M220 95 H280"/><path d="M240 95 V131 H280"/><path d="M240 131 V167 H280"/></g>
+  <text x="450" y="30" class="ts">ROOT follows the vehicle root</text>
+  <text x="450" y="46" class="ts">FRAME: position between the axle</text>
+  <text x="450" y="60" class="ts">  points, Damped Track to front</text>
+  <text x="450" y="76" class="ts">WHL_*: rotation from Auto driver</text>
+  <text x="450" y="92" class="ts">FX_Body: sway/bounce, additive</text>
+  <text x="450" y="112" class="ts">Custom props on the rig:</text>
+  <text x="450" y="126" class="ts">  ti_distance, ti_r_wheels,</text>
+  <text x="450" y="140" class="ts">  wheel_mode, fx_amount</text>
+</svg></figure></li>
+
+<li><h4>Bind the meshes to the rig</h4>
+<p>Parent each part to its bone (select part, Shift-select rig, Pose Mode, select bone, Ctrl+P → <b>Bone</b>). The tool does this automatically by name: <code>MC_Wheel_F</code> → <code>WHL_F</code>, and so on. Meshes <b>never</b> parent to the mechanism root or pivots (the “never bolted” rule).</p></li>
+
+<li><h4>Wheel groups <span class="pill p-todo">Tool</span></h4>
+<p>Group wheels that share a diameter: here one group, “wheels”, Ø 0.36 m, mode AUTO. The tool adds the <code>d / r</code> driver (Part 7 §7.4) to each wheel bone's X rotation and the <code>grip</code> and <code>slip_angle</code> properties for later.</p></li>
+
+<li><h4>Bind Rig</h4>
+<p>Fill Pivot Data (today's stub): pivot 1 → <code>MC_Rig</code> / <code>AXLE_F</code>, pivot 2 → <code>AXLE_R</code>, then <b>Bind Rig</b>. This creates the <code>TI_</code> constraints of Part 6 §6.6. After binding, hide the pivot Empties.</p></li>
+
+<li><h4>Test drive <span class="pill p-todo">Tool: test track</span></h4>
+<p>The add-on ships a test scene: an S-curve at the minimum radius, a banked curve, a turnout and a reverse loop. <b>Test Drive</b> runs the vehicle through it and reports:</p>
+<ul class="small" style="color:#1d232b">
+  <li>Pivots stay on the rails (distance to curve &lt; 1 mm) and the wheelbase is held (±1 mm).</li>
+  <li>Wheel travel matches the rotation: a marker on the tyre shouldn't slide along the rail.</li>
+  <li>Body overhang on the minimum radius (this sets the clearance you need).</li>
+  <li>No mesh parented to mechanism objects; no unapplied scale; all bones bound.</li>
+</ul></li>
+
+<li><h4>Publish to the library</h4>
+<ul>
+  <li>Put root, pivots, rig and meshes in one collection, <code>MC_MineCart</code>. Right-click → <b>Mark as Asset</b>.</li>
+  <li>Catalog: <code>Track It / Wagons</code>. Set a preview (render or auto).</li>
+  <li>The Vehicle Definition (Part 6 §6.8) is stored on the root, so the asset carries everything.</li>
+  <li>Save in a library .blend registered under Preferences → File Paths → Asset Libraries.</li>
+</ul></li>
+
+<li><h4>Use it</h4>
+<p>Drag the asset into a scene. The add-on detects a Track It vehicle and offers <b>Attach to nearest track</b> (the existing Attach logic). Add it to a consist from the Train Builder (<b>+ From Library</b>), then animate the consist's distance.</p></li>
+</ol>
+
+<h2>9.3 What the finished asset looks like</h2>
+<figure>
+<svg viewBox="0 0 700 300">
+  <rect x="10" y="10" width="360" height="280" rx="8" fill="#2b2f36"/>
+  <g font-size="11" fill="#d6dce4">
+    <text x="22" y="32">▼ MC_MineCart   (asset)</text>
+    <text x="42" y="54" fill="#f0b35a">◉ MC_Root   (vehicle root · Follow Path ×n)</text>
+    <text x="62" y="74" fill="#f0b35a">◇ MC_Root_Pivot1   (AXLE_POINT +0.45, hidden)</text>
+    <text x="62" y="94" fill="#f0b35a">◇ MC_Root_Pivot2   (AXLE_POINT −0.45, hidden)</text>
+    <text x="42" y="118" fill="#b69cf0">MC_Rig   (armature)</text>
+    <text x="62" y="138">▣ MC_Body       → bone BODY</text>
+    <text x="62" y="158">▣ MC_Frame      → bone FRAME</text>
+    <text x="62" y="178">▣ MC_Wheel_F    → bone WHL_F</text>
+    <text x="62" y="198">▣ MC_Wheel_R    → bone WHL_R</text>
+    <text x="62" y="218">▣ MC_Coupler_F  → bone CPL_F</text>
+    <text x="62" y="238">▣ MC_Coupler_R  → bone CPL_R</text>
+    <text x="22" y="266" fill="#8fa1b3">VehicleDef JSON on MC_Root · catalog Track It/Wagons</text>
+  </g>
+  <g class="t">
+    <text x="392" y="36" font-weight="bold">Checklist before publishing</text>
+    <text x="392" y="58">☐ scale applied, metres, +Y forward</text>
+    <text x="392" y="78">☐ wheels' origins on axle centres</text>
+    <text x="392" y="98">☐ pivots match the measured axles</text>
+    <text x="392" y="118">☐ every mesh parented to a rig bone</text>
+    <text x="392" y="138">☐ no mesh parented to mechanism</text>
+    <text x="392" y="158">☐ wheel groups + diameters set</text>
+    <text x="392" y="178">☐ Bind Rig done, Empties hidden</text>
+    <text x="392" y="198">☐ Test Drive passes</text>
+    <text x="392" y="218">☐ couplers measured (front/rear)</text>
+    <text x="392" y="238">☐ preview + catalog set</text>
+    <text x="392" y="266" class="ts">Track Doctor's vehicle checks automate most of this list.</text>
+  </g>
+</svg>
+<figcaption><b>Figure 9.2</b> Outliner view of the finished mine cart asset.</figcaption>
+</figure>
+
+<div class="callout c-idea"><div class="tag">Proxy first, final model later</div>
+<p>Because meshes only parent to rig bones, you can publish a vehicle built from <b>proxy blocks</b> (as planned for the 2-4-2), animate whole scenes with it, and later swap in the finished model by re-parenting its parts to the same bones. The animation doesn't change at all.</p></div>
+</body></html>

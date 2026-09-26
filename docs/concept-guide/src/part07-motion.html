@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Part 7 · Motion, drive and wheels</title>
+<link rel="stylesheet" href="style.css"></head>
+<body data-footer="Part 7 · Motion, drive and wheels">
+
+<div class="opener">
+  <div class="part-kicker">Part 7</div>
+  <h1 class="part-title">Motion, drive and wheels</h1>
+  <p class="part-lede">How the animator actually moves a train: one distance channel, friendly timing tools, live drive controls that can't crash Blender, wheels that roll on their own or on command, and secondary motion that makes it feel heavy.</p>
+</div>
+<div class="toc-part">
+  <div>7.1 One Motion channel: distance</div><div>7.2 Timing tools</div>
+  <div>7.3 Live drive controls</div><div>7.4 Wheel modes</div>
+  <div>7.5 Secondary motion</div><div>7.6 Speed readout</div>
+  <div>7.7 Render-safe evaluation</div><div>7.8 Bake Train Motion</div>
+</div>
+
+<h2>7.1 One Motion channel: distance</h2>
+<p>Today the animator keys <code>offset_factor</code> on every held constraint. Speed then depends on each curve's length, and a train crossing three curves has three unrelated F-curves. Instead, key <b>one number per train: distance travelled, in metres</b>.</p>
+<figure>
+<svg viewBox="0 0 700 250">
+  <rect x="5" y="5" width="335" height="240" rx="8" fill="#f9e5e3" stroke="#eab9b4"/>
+  <text x="18" y="26" class="tb">Today: offset per curve</text>
+  <line x1="30" y1="200" x2="320" y2="200" stroke="#5b6673"/><line x1="30" y1="40" x2="30" y2="200" stroke="#5b6673"/>
+  <path d="M30 200 C 80 195, 110 150, 140 120" stroke="#2a5d9f" stroke-width="2.5" fill="none"/>
+  <path d="M140 190 C 180 170, 220 110, 250 80" stroke="#2f7d4f" stroke-width="2.5" fill="none"/>
+  <path d="M250 196 C 280 180, 300 170, 320 160" stroke="#6a4aa5" stroke-width="2.5" fill="none"/>
+  <line x1="140" y1="45" x2="140" y2="200" stroke="#b3372f" stroke-dasharray="3 3"/><line x1="250" y1="45" x2="250" y2="200" stroke="#b3372f" stroke-dasharray="3 3"/>
+  <text x="40" y="222" class="ts">three F-curves, three scales, jumps at every switch;</text>
+  <text x="40" y="236" class="ts">the same slope means a different speed on each curve</text>
+  <rect x="360" y="5" width="335" height="240" rx="8" fill="#e4f3ea" stroke="#b7dcc5"/>
+  <text x="373" y="26" class="tb">Proposed: consist.distance (m)</text>
+  <line x1="385" y1="200" x2="675" y2="200" stroke="#5b6673"/><line x1="385" y1="40" x2="385" y2="200" stroke="#5b6673"/>
+  <path d="M385 200 C 450 200, 480 170, 530 130 S 620 50, 675 48" stroke="#2f7d4f" stroke-width="3" fill="none"/>
+  <text x="395" y="222" class="ts">one smooth curve across any number of switches;</text>
+  <text x="395" y="236" class="ts">slope = speed in m/frame, everywhere</text>
+</svg>
+<figcaption><b>Figure 7.1</b> The same run keyed both ways. On the right, easing in the Graph Editor directly gives acceleration and braking.</figcaption>
+</figure>
+<p>Reversing is just a falling curve. A stop is a flat section. The route (Part 5) turns distance into curve and offset for every point of the train. <b>Migration</b>: the Convert operator (Part 5 §5.8) turns old offset keys into distance keys.</p>
+
+<h2>7.2 Timing tools</h2>
+<div class="grid2">
+<div class="card"><h4>Speed Profile generator</h4>
+<p class="small" style="color:#1d232b">Enter start frame, cruise speed (km/h or mph), acceleration and braking rates, and a stop distance or target marker. The operator writes distance keys with correct easing. It works for “depart the platform” shots.</p>
+<svg viewBox="0 0 300 110"><polyline points="10,95 70,30 220,30 290,95" fill="none" stroke="#2f7d4f" stroke-width="2.5"/><line x1="10" y1="95" x2="295" y2="95" stroke="#5b6673"/><text x="20" y="60" class="ts">accelerate</text><text x="120" y="24" class="ts">cruise</text><text x="230" y="60" class="ts">brake</text><text x="12" y="108" class="ts">speed over time</text></svg></div>
+<div class="card"><h4>Arrive At</h4>
+<p class="small" style="color:#1d232b">Pick a target (a marker Empty on the track, a platform end, or another train's coupler). The operator computes the distance along the <i>route</i> to it and keys the train to stop exactly there on a chosen frame. It also handles <b>coupling moves</b> (stop with the couplers touching).</p></div>
+</div>
+
+<h2>7.3 Live drive controls</h2>
+<table>
+  <thead><tr><th style="width:22%">Control</th><th style="width:16%">Status</th><th>Role in the finished add-on</th></tr></thead>
+  <tbody>
+    <tr><td><b>Drag Slider</b></td><td><span class="pill p-done">Keep</span></td><td>Proven, and the feel is right. Rewire it to nudge <code>consist.distance</code> (metres per second × power) instead of one curve's factor. Speed then feels the same on every curve.</td></tr>
+    <tr><td><b>Drag Pad</b></td><td><span class="pill p-part">Recover</span></td><td>The 2D pad prototype (not in the latest file). It becomes the crash-safe “mouse drag”: an add-on-owned <b>modal operator</b> (not <code>TRANSFORM_OT_translate</code>), where horizontal mouse movement = distance. Writes happen inside the operator's own <code>modal()</code> event, never in a handler.</td></tr>
+    <tr><td><b>Mouse Drag</b></td><td><span class="pill p-bug">Remove</span></td><td>Delete once the Drag Pad works, since it is the only feature near the crash pattern.</td></tr>
+    <tr><td><b>Step buttons</b></td><td><span class="pill p-todo">New</span></td><td>“◀ 1 m / 1 m ▶” and “to next junction” for precise placement.</td></tr>
+    <tr><td><b>Snap to marker</b></td><td><span class="pill p-todo">New</span></td><td>Jump the train so its lead coupler (or any member) sits at a chosen track marker.</td></tr>
+  </tbody>
+</table>
+<div class="callout c-warn"><div class="tag">Keep the crash rule</div>
+<p>Drag Pad writes a single float per event and calls the pipeline directly. This is the same pattern as the Drag Slider, which has never crashed. It must never call <code>bpy.ops.transform.*</code>, and never rely on a depsgraph handler to do the writing.</p></div>
+
+<h2>7.4 Wheel modes</h2>
+<p>A wheel of radius <i>r</i> rolling a distance <i>s</i> without slipping turns by <b>θ = s ÷ r radians</b>. Each wheel group has its own diameter: a 2-4-2's drivers turn much more slowly than its truck wheels.</p>
+<figure>
+<svg viewBox="0 0 700 170">
+  <line x1="20" y1="140" x2="680" y2="140" stroke="#5b6673" stroke-width="3"/>
+  <circle cx="120" cy="100" r="40" fill="none" stroke="#6a4aa5" stroke-width="3"/><line x1="120" y1="100" x2="120" y2="60" stroke="#6a4aa5" stroke-width="3"/>
+  <circle cx="420" cy="100" r="40" fill="none" stroke="#6a4aa5" stroke-width="3"/><line x1="420" y1="100" x2="454.6" y2="120" stroke="#6a4aa5" stroke-width="3"/>
+  <path d="M120 150 L 420 150" stroke="#2f7d4f" stroke-width="2" marker-end="url(#w1)"/>
+  <defs><marker id="w1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" fill="#2f7d4f"/></marker></defs>
+  <text x="240" y="166" class="t" fill="#2f7d4f">s metres</text>
+  <text x="480" y="80" class="t">θ = s / r</text><text x="480" y="98" class="ts">r = 0.865 m (1.73 m driver)</text><text x="480" y="114" class="ts">1 turn every 5.43 m</text>
+</svg>
+<figcaption><b>Figure 7.2</b> The rule behind Auto mode, and the one the legacy rig approximated with a tuned <code>prop1 / Maxtravel</code> driver.</figcaption>
+</figure>
+<table>
+  <thead><tr><th style="width:15%">Mode</th><th style="width:40%">Rotation =</th><th>Use for</th></tr></thead>
+  <tbody>
+    <tr><td><b>AUTO</b></td><td><code>facing × d_point / r</code> from a driver</td><td>Normal running. Zero effort, always in sync.</td></tr>
+    <tr><td><b>DIRECT</b></td><td>The animator's own keys (driver muted)</td><td>Full manual control of a wheel set.</td></tr>
+    <tr><td><b>AUTO + SLIP</b></td><td><code>facing × d / r + slip_angle</code>, where <code>slip_angle</code> is a keyable bone property</td><td>Wheel slip on starting (drivers spin, loco barely moves). Key slip_angle rising fast while distance creeps.</td></tr>
+    <tr><td><b>AUTO × GRIP</b></td><td><code>grip × (facing × d / r) + slip_angle</code>, with grip 0–1</td><td>Sliding or skidding under braking: grip → 0 locks the wheels while the train keeps moving.</td></tr>
+  </tbody>
+</table>
+<pre># driver on WHL_D1_L rotation_euler[0]  (variables read custom properties on the rig)
+#   d    = rig["ti_distance"]        written each frame by the pipeline (point distance)
+#   r    = rig["ti_r_drivers"]       from the Vehicle Definition
+#   g    = pose.bones["WHL_D1_L"]["grip"]         default 1.0 (keyable)
+#   slip = pose.bones["WHL_D1_L"]["slip_angle"]   default 0.0 (keyable)
+expression:  g * d / r + slip</pre>
+<p class="small">Drivers are evaluated by Blender itself, so wheels also turn in background renders. Only the <code>ti_distance</code> value comes from Python, and a bake makes even that static (§7.8).</p>
+
+<h2>7.5 Secondary motion</h2>
+<p>These are all <b>additive</b> transforms on dedicated rig bones (“FX” bones under the body and bogies). They never feed back into the mechanism, and each has a master amount you can key to 0.</p>
+<table>
+  <thead><tr><th style="width:16%">Effect</th><th style="width:40%">Model</th><th>Driven by</th></tr></thead>
+  <tbody>
+    <tr><td><b>Body roll on curves</b></td><td><code>roll = k_roll × v² × κ − cant</code>: lean outward when running faster than the cant was designed for</td><td>Speed v (m/s) and curvature κ = 1/R, both from the route at the body point</td></tr>
+    <tr><td><b>Hunting</b></td><td><code>yaw = A(v) × sin(2π d / λ)</code>, a sinusoidal wander of bogies; λ ≈ 15–25 m</td><td>Distance d, with amplitude rising with speed</td></tr>
+    <tr><td><b>Rail-joint bounce</b></td><td>A small dip-and-recover every <code>joint_spacing</code> metres, front bogie then rear</td><td>d modulo spacing (the classic “clickety-clack”)</td></tr>
+    <tr><td><b>Suspension noise</b></td><td>Low-amplitude noise on body Z and roll</td><td>A Noise F-modifier on an FX bone, scaled by speed</td></tr>
+    <tr><td><b>Steam loco surge</b></td><td>Fore/aft pulse, 4 beats per driver revolution (2 cylinders, double-acting)</td><td>Driver wheel angle</td></tr>
+  </tbody>
+</table>
+<figure>
+<svg viewBox="0 0 700 150">
+  <line x1="20" y1="75" x2="680" y2="75" stroke="#d5dbe2"/>
+  <path d="M20 75 Q 60 45 100 75 T 180 75 T 260 75 T 340 75 T 420 75 T 500 75 T 580 75 T 660 75" fill="none" stroke="#6a4aa5" stroke-width="2"/>
+  <text x="20" y="20" class="t" fill="#6a4aa5">hunting yaw vs distance</text>
+  <g stroke="#c07a12" stroke-width="2">
+    <line x1="120" y1="110" x2="120" y2="135"/><line x1="300" y1="110" x2="300" y2="135"/><line x1="480" y1="110" x2="480" y2="135"/><line x1="660" y1="110" x2="660" y2="135"/>
+  </g>
+  <text x="20" y="128" class="t" fill="#c07a12">rail joints</text>
+</svg>
+<figcaption><b>Figure 7.3</b> Distance-based effects stay perfectly repeatable: scrub back and forth and they don't change.</figcaption>
+</figure>
+
+<h2>7.6 Speed readout</h2>
+<p>The Drive box shows live <b>speed (km/h or mph)</b>, <b>distance</b>, the <b>current segment</b>, and <b>next junction in N m</b>. It helps with matching real timetables and with hitting marks. A small viewport overlay (the same safe draw-handler technique as the existing HUD) can show it on-screen while scrubbing.</p>
+
+<h2>7.7 Render-safe evaluation</h2>
+<div class="callout c-warn"><div class="tag">The current risk</div>
+<p>Pivots, wagons and held offsets only update for the <b>active object</b>. Render an animation with nothing (or the camera) selected, and every pivot and wagon stays wherever it was last left, while the root alone follows its keys. This is audit issue #1, and it should be fixed before any production use.</p></div>
+<ol class="steps">
+  <li><h4>Evaluate all consists</h4><p>In <code>frame_change_pre</code>, loop over <code>scene.track_it_consists</code> (not the selection) and run steps 1–4 of the pipeline (Part 3, Fig. 3.3).</p></li>
+  <li><h4>Mark the handler <code>@persistent</code></h4><p>That is already the case. Re-register on <code>load_post</code>, and rebuild caches.</p></li>
+  <li><h4>Keep the rest native</h4><p>Constraints and drivers only after step 4, so the depsgraph evaluates everything in one pass.</p></li>
+  <li><h4>Test headless</h4><p><code>blender -b scene.blend -f 120</code> must produce the same pose as the viewport at frame 120 (Part 11 test plan).</p></li>
+</ol>
+
+<h2>7.8 Bake Train Motion</h2>
+<p>For render farms, exports (FBX/Alembic/USD to game engines) or sharing a file with someone who doesn't have the add-on:</p>
+<ul>
+  <li><b>Bake</b>: for a frame range, evaluate each frame and key every managed constraint's offset_factor and influence (CONSTANT on influence), plus <code>ti_distance</code> on rigs. Tag the result <code>ti_baked = True</code>.</li>
+  <li>While baked, the pipeline <b>skips</b> that consist. Playback is pure keyframes.</li>
+  <li><b>Clear Bake</b>: remove those keys and return to live evaluation.</li>
+  <li>Optional <b>Bake to Transforms</b>: <code>visual_transform_apply</code> per frame, for export to engines without Follow Path.</li>
+</ul>
+</body></html>

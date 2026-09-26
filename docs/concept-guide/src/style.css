@@ -1,0 +1,114 @@
+/* Rail Animator / Track It — concept guide print stylesheet */
+:root {
+  --ink: #1d232b;
+  --muted: #5b6673;
+  --line: #d5dbe2;
+  --paper: #ffffff;
+  --panel: #f4f6f9;
+  --accent: #2a5d9f;      /* track / mechanism blue */
+  --accent-soft: #e3ecf8;
+  --amber: #c07a12;       /* pivots */
+  --amber-soft: #fbf1df;
+  --green: #2f7d4f;       /* proposals / ok */
+  --green-soft: #e4f3ea;
+  --red: #b3372f;         /* warnings / bugs */
+  --red-soft: #f9e5e3;
+  --violet: #6a4aa5;      /* rig layer */
+  --violet-soft: #eee8f8;
+  --mono: "DejaVu Sans Mono", "Liberation Mono", monospace;
+  --sans: "DejaVu Sans", "Liberation Sans", Arial, sans-serif;
+}
+
+@page { size: Letter; margin: 18mm 17mm 20mm 17mm; }
+
+* { box-sizing: border-box; }
+html, body { background: var(--paper); color: var(--ink); }
+body { font-family: var(--sans); font-size: 10pt; line-height: 1.5; margin: 0; }
+
+h1, h2, h3, h4 { line-height: 1.2; margin: 0; }
+h1.part-title { font-size: 26pt; letter-spacing: -0.5px; margin: 6mm 0 3mm; }
+.part-kicker { font-size: 10pt; font-weight: bold; color: var(--accent); text-transform: uppercase; letter-spacing: 2px; }
+.part-lede { font-size: 12pt; color: var(--muted); max-width: 150mm; margin-bottom: 6mm; }
+h2 { font-size: 15pt; margin: 8mm 0 3mm; padding-bottom: 1.5mm; border-bottom: 2px solid var(--accent); break-after: avoid; }
+h3 { font-size: 11.5pt; margin: 5mm 0 2mm; color: var(--accent); break-after: avoid; }
+h4 { font-size: 10pt; margin: 3mm 0 1mm; break-after: avoid; }
+p { margin: 0 0 2.5mm; }
+ul, ol { margin: 0 0 3mm; padding-left: 6mm; }
+li { margin-bottom: 1mm; }
+code, .mono { font-family: var(--mono); font-size: 8.6pt; background: var(--panel); padding: 0 1mm; border-radius: 2px; }
+pre { font-family: var(--mono); font-size: 8.2pt; background: var(--panel); border: 1px solid var(--line); border-radius: 4px; padding: 3mm; white-space: pre-wrap; margin: 0 0 3mm; break-inside: avoid; line-height: 1.4; }
+pre code { background: none; padding: 0; }
+strong { font-weight: bold; }
+.small { font-size: 8.6pt; color: var(--muted); }
+
+.page-break { break-before: page; }
+.keep { break-inside: avoid; }
+
+/* Part opener */
+.opener { border-left: 6px solid var(--accent); padding-left: 6mm; margin-bottom: 4mm; }
+.toc-part { columns: 2; column-gap: 8mm; font-size: 9.5pt; margin: 2mm 0 5mm; }
+.toc-part div { break-inside: avoid; padding: 0.6mm 0; border-bottom: 1px dotted var(--line); }
+
+/* Callouts */
+.callout { border-radius: 5px; padding: 3mm 4mm; margin: 3mm 0 4mm; break-inside: avoid; border: 1px solid; }
+.callout .tag { display: inline-block; font-size: 7.6pt; font-weight: bold; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 1mm; }
+.callout p:last-child, .callout ul:last-child { margin-bottom: 0; }
+.c-now { background: var(--accent-soft); border-color: #b9cde8; }
+.c-now .tag { color: var(--accent); }
+.c-idea { background: var(--green-soft); border-color: #b7dcc5; }
+.c-idea .tag { color: var(--green); }
+.c-warn { background: var(--red-soft); border-color: #eab9b4; }
+.c-warn .tag { color: var(--red); }
+.c-decide { background: var(--amber-soft); border-color: #ecd3a6; }
+.c-decide .tag { color: var(--amber); }
+.c-rig { background: var(--violet-soft); border-color: #d2c6ea; }
+.c-rig .tag { color: var(--violet); }
+
+/* Tables */
+table { width: 100%; border-collapse: collapse; margin: 2mm 0 4mm; font-size: 8.8pt; break-inside: auto; }
+thead { display: table-header-group; }
+tr { break-inside: avoid; }
+th { background: var(--ink); color: #fff; text-align: left; padding: 1.6mm 2mm; font-weight: bold; }
+td { border-bottom: 1px solid var(--line); padding: 1.5mm 2mm; vertical-align: top; }
+tr:nth-child(even) td { background: #fafbfc; }
+td.num, th.num { text-align: right; white-space: nowrap; }
+
+/* Status pills */
+.pill { display: inline-block; font-size: 7.4pt; font-weight: bold; padding: 0.2mm 1.8mm; border-radius: 8px; white-space: nowrap; }
+.p-done { background: var(--green-soft); color: var(--green); }
+.p-part { background: var(--amber-soft); color: var(--amber); }
+.p-todo { background: var(--panel); color: var(--muted); border: 1px solid var(--line); }
+.p-bug { background: var(--red-soft); color: var(--red); }
+
+/* Figures */
+figure { margin: 3mm 0 5mm; break-inside: avoid; }
+figure svg { display: block; width: 100%; height: auto; }
+figcaption { font-size: 8.4pt; color: var(--muted); margin-top: 1.5mm; }
+figcaption b { color: var(--ink); }
+
+/* Steps */
+.steps { counter-reset: step; list-style: none; padding-left: 0; }
+.steps > li { counter-increment: step; position: relative; padding: 2mm 0 2mm 11mm; border-bottom: 1px solid var(--line); break-inside: avoid; }
+.steps > li::before { content: counter(step); position: absolute; left: 0; top: 2mm; width: 7mm; height: 7mm; border-radius: 50%; background: var(--accent); color: #fff; font-weight: bold; text-align: center; line-height: 7mm; font-size: 9pt; }
+.steps > li h4 { margin-top: 0; }
+
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 5mm; }
+.grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4mm; }
+.card { border: 1px solid var(--line); border-radius: 5px; padding: 3mm; break-inside: avoid; background: #fff; }
+.card h4 { margin-top: 0; }
+
+/* Cover */
+.cover { height: 240mm; display: flex; flex-direction: column; justify-content: space-between; }
+.cover .band { background: var(--ink); color: #fff; padding: 12mm 10mm; border-radius: 6px; }
+.cover .band h1 { font-size: 32pt; margin: 3mm 0 2mm; letter-spacing: -0.5px; }
+.cover .band p { color: #c9d3de; font-size: 12pt; margin: 0; }
+.cover .meta { font-size: 9pt; color: var(--muted); }
+.cover .meta td { border: none; padding: 0.8mm 3mm 0.8mm 0; background: none !important; }
+
+/* SVG text defaults (inline diagrams) */
+svg text { font-family: var(--sans); }
+svg .t { font-size: 11px; fill: var(--ink); }
+svg .ts { font-size: 9.5px; fill: var(--muted); }
+svg .tb { font-size: 12px; font-weight: bold; fill: var(--ink); }
+svg .tw { font-size: 11px; fill: #fff; font-weight: bold; }
+svg .mono { font-family: var(--mono); font-size: 9.5px; background: none; }

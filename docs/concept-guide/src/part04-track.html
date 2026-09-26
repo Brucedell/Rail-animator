@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Part 4 · Track system</title>
+<link rel="stylesheet" href="style.css"></head>
+<body data-footer="Part 4 · Track system">
+
+<div class="opener">
+  <div class="part-kicker">Part 4</div>
+  <h1 class="part-title">Track system</h1>
+  <p class="part-lede">Turning a pile of curve objects into a railway the add-on <i>understands</i>: accurate, cached geometry; a network that knows which pieces join and where the switches are; banking; and the tools that build and check it all.</p>
+</div>
+<div class="toc-part">
+  <div>4.1 Anatomy of a track piece</div><div>4.2 Arc tables done right</div>
+  <div>4.3 The Track Network</div><div>4.4 Turnouts and overlap zones</div>
+  <div>4.5 Joints and auto-continue</div><div>4.6 Banking (cant) tools</div>
+  <div>4.7 Track Builder and presets</div><div>4.8 Track Doctor (validation)</div>
+</div>
+
+<h2>4.1 Anatomy of a track piece</h2>
+<figure>
+<svg viewBox="0 0 700 210">
+  <!-- plan -->
+  <text x="10" y="18" class="tb">Plan view</text>
+  <path d="M20 120 C 150 120, 250 60, 400 60" fill="none" stroke="#5b6673" stroke-width="10" opacity=".25"/>
+  <path d="M20 120 C 150 120, 250 60, 400 60" fill="none" stroke="#2a5d9f" stroke-width="2.5"/>
+  <circle cx="20" cy="120" r="5" fill="#2a5d9f"/><circle cx="400" cy="60" r="5" fill="#2a5d9f"/>
+  <text x="20" y="145" class="ts">end_0 (factor 0)</text><text x="350" y="45" class="ts">end_1 (factor 1)</text>
+  <text x="130" y="170" class="t">Centre line = the curve the train follows.</text>
+  <text x="130" y="186" class="ts">Rails, sleepers, ballast are separate visuals generated from it.</text>
+  <!-- section -->
+  <g transform="translate(470,20)">
+    <rect x="0" y="0" width="220" height="180" rx="8" fill="#f4f6f9" stroke="#d5dbe2"/>
+    <text x="12" y="20" class="tb">Cross-section</text>
+    <path d="M20 150 L60 110 L160 110 L200 150 Z" fill="#c9c2b4"/>
+    <rect x="45" y="100" width="130" height="10" fill="#7a5a3a"/>
+    <rect x="70" y="90" width="8" height="10" fill="#5b6673"/><rect x="142" y="90" width="8" height="10" fill="#5b6673"/>
+    <circle cx="110" cy="90" r="4" fill="#2a5d9f"/>
+    <line x1="110" y1="30" x2="110" y2="90" stroke="#2a5d9f" stroke-dasharray="3 3"/>
+    <text x="116" y="50" class="ts">curve sits at</text><text x="116" y="62" class="ts">rail-top height</text>
+    <text x="12" y="172" class="ts">gauge = rail spacing (e.g. 1.435 m)</text>
+  </g>
+</svg>
+<figcaption><b>Figure 4.1</b> Recommended convention: the curve runs along the <b>centre line at rail-top height</b>. A vehicle root with origin at rail-top then needs no vertical offset, and pivots land on the rails.</figcaption>
+</figure>
+
+<h2>4.2 Arc tables done right</h2>
+<p>The arc table is the add-on's picture of each curve. Today it is rebuilt from the Bézier formula, ignores cyclic splines, and <b>is never refreshed after the curve is edited</b> (audit #2). The fix keeps the same idea and makes it exact and self-maintaining:</p>
+<ol class="steps">
+  <li><h4>Sample the way Blender does</h4><p>Use <code>mathutils.geometry.interpolate_bezier(knot1, handle1, handle2, knot2, resolution_u + 1)</code> for each segment. This is the function the first session tried to call with a float. It returns exactly the points Blender's own polyline uses. Include the closing segment when <code>use_cyclic_u</code> is on. Transform by <code>matrix_world</code>.</p></li>
+  <li><h4>Store cumulative length per polyline vertex</h4><p>Offsets then map to positions by <b>interpolating between two vertices</b>, not snapping to the nearest of 5,000 samples. This is more exact, and the tables are about 20× smaller.</p></li>
+  <li><h4>Nearest-point via KD-tree + segment projection</h4><p>Build a <code>mathutils.kdtree.KDTree</code> of the vertices. For a query, take the few nearest vertices, project onto their adjacent segments, and keep the best. That is O(log n) instead of a 5,000-point loop on every tick.</p></li>
+  <li><h4>Key the cache by geometry, not name</h4><p><code>geo_hash</code> = hash of point coordinates, handles, tilt, <code>matrix_world</code>, <code>resolution_u</code> and cyclic flag. Check it cheaply (on <code>depsgraph_update_post</code>, only for curves listed in <code>depsgraph.updates</code>) and mark dirty on change.</p></li>
+</ol>
+<figure>
+<svg viewBox="0 0 700 130">
+  <defs><marker id="t1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" fill="#5b6673"/></marker></defs>
+  <rect x="10" y="30" width="130" height="50" rx="6" fill="#e3ecf8" stroke="#b9cde8"/><text x="22" y="52" class="t">Curve edited</text><text x="22" y="68" class="ts">(Tab, G on points)</text>
+  <rect x="170" y="30" width="150" height="50" rx="6" fill="#f4f6f9" stroke="#d5dbe2"/><text x="182" y="52" class="t">depsgraph.updates</text><text x="182" y="68" class="ts">lists the curve id</text>
+  <rect x="350" y="30" width="150" height="50" rx="6" fill="#fbf1df" stroke="#ecd3a6"/><text x="362" y="52" class="t">geo_hash differs?</text><text x="362" y="68" class="ts">yes → drop table</text>
+  <rect x="530" y="30" width="160" height="50" rx="6" fill="#e4f3ea" stroke="#b7dcc5"/><text x="542" y="52" class="t">Lazy rebuild on</text><text x="542" y="68" class="ts">next query + net dirty</text>
+  <line x1="140" y1="55" x2="168" y2="55" stroke="#5b6673" marker-end="url(#t1)"/>
+  <line x1="320" y1="55" x2="348" y2="55" stroke="#5b6673" marker-end="url(#t1)"/>
+  <line x1="500" y1="55" x2="528" y2="55" stroke="#5b6673" marker-end="url(#t1)"/>
+  <text x="10" y="110" class="ts">Nothing writes RNA in this path. It only drops Python caches, so it is safe even during a modal transform.</text>
+</svg>
+<figcaption><b>Figure 4.2</b> Cache invalidation flow.</figcaption>
+</figure>
+
+<h2>4.3 The Track Network</h2>
+<p>Today the add-on discovers relationships <i>while driving</i>, by scanning every curve for proximity on every tick. The Track Network does that work <b>once</b>, with a <b>Scan Track</b> button (and automatically when the geometry changes), and stores the answer as a graph:</p>
+<figure>
+<svg viewBox="0 0 700 300">
+  <!-- geometry -->
+  <path d="M20 220 L 330 220" stroke="#2a5d9f" stroke-width="3" fill="none"/>
+  <path d="M330 220 L 680 220" stroke="#2a5d9f" stroke-width="3" fill="none"/>
+  <path d="M200 221 C 300 221, 380 200, 520 120 L 680 40" stroke="#2f7d4f" stroke-width="3" fill="none"/>
+  <path d="M520 120 L 580 70" stroke="none"/>
+  <path d="M560 97 C 600 80, 640 90, 690 100" stroke="#6a4aa5" stroke-width="3" fill="none"/>
+  <g class="ts">
+    <text x="60" y="210">Main A</text><text x="480" y="240">Main B</text><text x="610" y="40">Siding</text><text x="640" y="118">Yard 1</text>
+  </g>
+  <!-- nodes -->
+  <circle cx="330" cy="220" r="7" fill="#fff" stroke="#1d232b" stroke-width="2"/><text x="310" y="248" class="t">J1 joint</text>
+  <rect x="193" y="213" width="14" height="14" fill="#c07a12"/><text x="150" y="252" class="t">T1 turnout</text>
+  <rect x="553" y="90" width="14" height="14" fill="#c07a12"/><text x="520" y="80" class="t">T2 turnout</text>
+  <!-- overlap band -->
+  <rect x="200" y="212" width="85" height="17" fill="#c07a12" opacity=".15"/>
+  <text x="205" y="200" class="ts">overlap span</text>
+  <!-- graph inset -->
+  <g transform="translate(20,20)">
+    <rect x="0" y="0" width="300" height="150" rx="8" fill="#f4f6f9" stroke="#d5dbe2"/>
+    <text x="12" y="20" class="tb">Stored as a graph</text>
+    <g class="ts">
+      <circle cx="40" cy="70" r="16" fill="#fff" stroke="#2a5d9f"/><text x="27" y="74">MainA</text>
+      <circle cx="130" cy="70" r="16" fill="#fff" stroke="#2a5d9f"/><text x="118" y="74">MainB</text>
+      <circle cx="130" cy="125" r="16" fill="#fff" stroke="#2f7d4f"/><text x="116" y="129">Siding</text>
+      <circle cx="240" cy="125" r="16" fill="#fff" stroke="#6a4aa5"/><text x="228" y="129">Yard1</text>
+      <line x1="56" y1="70" x2="114" y2="70" stroke="#1d232b"/><text x="70" y="62">J1</text>
+      <line x1="52" y1="81" x2="116" y2="116" stroke="#c07a12" stroke-width="2"/><text x="60" y="110">T1</text>
+      <line x1="146" y1="125" x2="224" y2="125" stroke="#c07a12" stroke-width="2"/><text x="178" y="118">T2</text>
+      <text x="170" y="60">nodes = segments</text><text x="170" y="74">edges = junctions</text>
+    </g>
+  </g>
+</svg>
+<figcaption><b>Figure 4.3</b> A small layout and its network. Each junction records the legs, where on each curve they meet (offset), and whether factor runs the same or opposite way across it.</figcaption>
+</figure>
+
+<h3>How Scan Track classifies connections</h3>
+<table>
+  <thead><tr><th style="width:18%">Kind</th><th style="width:40%">Detected when…</th><th>Stored</th></tr></thead>
+  <tbody>
+    <tr><td><b>Joint</b></td><td>An endpoint of A is within tolerance of an endpoint of B, and the tangents are parallel (either direction).</td><td>(A, end), (B, end), direction flip flag</td></tr>
+    <tr><td><b>Turnout</b></td><td>An endpoint of B lies on A's <i>interior</i>, and B hugs A for a <b>continuous span</b> before separating.</td><td>A offset range, B offset range, divergence point, span length, which leg is “through”</td></tr>
+    <tr><td><b>Crossing / diamond</b></td><td>A and B intersect at an angle, with no shared span.</td><td>Informational only: no switching, and a warning if a vehicle could get confused</td></tr>
+    <tr><td><b>Dead end</b></td><td>An endpoint with nothing near it.</td><td>A buffer stop. Vehicles stop here (factor clamped)</td></tr>
+  </tbody>
+</table>
+<div class="callout c-idea"><div class="tag">This also fixes v8 §8.5 (yard false positive)</div>
+<p>The span test in the Turnout row is the “overlap span” fix proposed in v8. Several dead-end sidings that just happen to end near each other fail it, because they don't <i>hug</i> each other over a length. They are classified as dead ends, and a train can never jump between them.</p></div>
+
+<h2>4.4 Turnouts and overlap zones</h2>
+<p>A real turnout has a <b>toe</b> (where the diverging route starts), <b>points</b> that move, and a <b>heel/frog</b> where the routes separate. In curve terms:</p>
+<figure>
+<svg viewBox="0 0 700 250">
+  <path d="M20 170 L 680 170" stroke="#2a5d9f" stroke-width="3" fill="none"/>
+  <path d="M180 171 C 280 171, 380 165, 480 120 S 620 50, 690 40" stroke="#2f7d4f" stroke-width="3" fill="none" stroke-dasharray="9 5"/>
+  <rect x="180" y="160" width="160" height="22" fill="#c07a12" opacity=".15"/>
+  <line x1="180" y1="130" x2="180" y2="200" stroke="#1d232b" stroke-dasharray="3 3"/>
+  <line x1="340" y1="130" x2="340" y2="200" stroke="#b3372f" stroke-dasharray="3 3"/>
+  <text x="120" y="125" class="t">toe / handoff point</text>
+  <text x="310" y="215" class="t" fill="#b3372f">divergence</text>
+  <text x="205" y="150" class="ts">overlap span L_ov</text>
+  <text x="560" y="190" class="ts">through: Main</text><text x="560" y="40" class="ts">diverge: Branch</text>
+  <text x="20" y="235" class="t">Handoff happens at a <tspan font-weight="bold">single point</tspan> where both curves have the same position <tspan font-weight="bold">and</tspan> heading.</text>
+</svg>
+<figcaption><b>Figure 4.4</b> The anatomy Scan Track looks for. The branch should start <b>tangent</b> to the main line at the toe.</figcaption>
+</figure>
+
+<h3>How long does the overlap need to be?</h3>
+<table>
+  <thead><tr><th style="width:30%">Model</th><th>Rule</th></tr></thead>
+  <tbody>
+    <tr><td>Today (shadow-tracked switching)</td><td>L_ov ≥ the vehicle's longest pivot offset, and for trains ≥ the whole consist length, because pivots and wagons clamp to the root's curve (v8 §3.3).</td></tr>
+    <tr><td>With the Route Plan (Part 5)</td><td>L_ov only needs to be <b>long enough to place the toe accurately</b> (a few metres). Every point on the train switches when <i>it</i> reaches the toe, because the route itself changes curve there. Length stops being a constraint.</td></tr>
+  </tbody>
+</table>
+<div class="callout c-decide"><div class="tag">Decision</div>
+<p>Should the toe be the <b>start</b> of the overlap (natural for turnouts built by duplicating a piece of main line) or an explicit <b>marker Empty</b> the user places? Recommendation: auto-detect the start of the overlap, and allow an optional override Empty for odd geometry.</p></div>
+
+<h2>4.5 Joints and auto-continue</h2>
+<p>A joint is a switch with only one option. In the network model the route <b>simply continues</b> across a joint, with no button and no live-switch logic. The requested <b>“auto-jump to next spline” toggle</b> becomes a per-junction or scene option:</p>
+<ul>
+  <li><b>On</b> (default): the route runs through the joint.</li>
+  <li><b>Off</b>: the joint acts as a buffer stop until enabled. This is useful for yard staging, and it can later become a per-vehicle setting (a shunter stops at every joint; an express never does).</li>
+</ul>
+
+<h2>4.6 Banking (cant) tools</h2>
+<p>Banking already works through point tilt. What's missing is <b>authoring help</b>. Railways set cant from curve radius and design speed:</p>
+<pre>equilibrium cant angle  θ ≈ atan( v² / (g · R) )        v = design speed (m/s), R = radius (m), g = 9.81
+real railways cap cant: ~150 mm on 1.435 m gauge  → θ_max ≈ 6°</pre>
+<figure>
+<svg viewBox="0 0 700 170">
+  <path d="M20 140 L 180 140 C 260 140, 320 60, 420 50 L 680 50" fill="none" stroke="#2a5d9f" stroke-width="3"/>
+  <g class="ts"><text x="40" y="160">straight: tilt 0°</text><text x="200" y="120">transition: ramps up</text><text x="300" y="40">curve: 5.8°</text><text x="520" y="40">straight: 0°</text></g>
+  <polyline points="20,100 180,100 260,70 420,70 470,100 680,100" fill="none" stroke="#c07a12" stroke-width="2"/>
+  <text x="560" y="118" class="ts" fill="#c07a12">tilt along length</text>
+</svg>
+<figcaption><b>Figure 4.5</b> The <b>Auto Cant</b> operator: measure curvature at each point, apply θ capped at a maximum, and ramp it over transition length so the train rolls in smoothly.</figcaption>
+</figure>
+
+<h2>4.7 Track Builder and presets</h2>
+<p>The legacy “Track It” and “Bank It” buttons build shrinkwrap planes for a rig that no longer exists (audit #13). Replace them with:</p>
+<div class="grid2">
+  <div class="card"><h4>Track Builder (Geometry Nodes)</h4>
+  <p class="small" style="color:#1d232b">One node-group modifier on the curve: rails (profile swept along the curve), sleepers (instances on points at spacing), ballast. It follows tilt automatically. Parameters: gauge, sleeper spacing, rail profile. It doesn't touch the curve the train rides.</p></div>
+  <div class="card"><h4>Preset pieces</h4>
+  <p class="small" style="color:#1d232b">An asset library of ready track: straights (e.g. 25 m), curves by radius, and <b>left/right turnouts with a correct toe and overlap already built</b>. Snap pieces end to end (joints) and Scan Track wires them up. This is the “preset tracks” plan from session 4.</p></div>
+</div>
+
+<h2>4.8 Track Doctor (validation)</h2>
+<p>A single button that lists problems, each with a “Select” and, where possible, “Fix” action:</p>
+<table>
+  <thead><tr><th style="width:36%">Check</th><th>Fix offered</th></tr></thead>
+  <tbody>
+    <tr><td>More than one spline in a track curve</td><td>Separate into objects</td></tr>
+    <tr><td>Object scale ≠ 1, or non-uniform</td><td>Apply scale</td></tr>
+    <tr><td>resolution_u below 12</td><td>Raise to 12</td></tr>
+    <tr><td>Twist method not Z-Up</td><td>Set Z-Up</td></tr>
+    <tr><td>Joint gap or tangent mismatch above tolerance</td><td>Snap endpoints / align handles</td></tr>
+    <tr><td>Branch not tangent at the toe</td><td>Align first handle to main tangent</td></tr>
+    <tr><td>Overlap span shorter than the longest vehicle (legacy mode only)</td><td>Report which vehicles are affected</td></tr>
+    <tr><td>Sharp kinks (radius below minimum for vehicles in the scene)</td><td>Highlight; suggest smoothing</td></tr>
+    <tr><td>Direction reversed on a keyed track</td><td>Warn before flipping</td></tr>
+  </tbody>
+</table>
+</body></html>

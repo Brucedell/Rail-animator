@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Part 3 · Framework architecture</title>
+<link rel="stylesheet" href="style.css"></head>
+<body data-footer="Part 3 · Framework architecture">
+
+<div class="opener">
+  <div class="part-kicker">Part 3</div>
+  <h1 class="part-title">Framework architecture</h1>
+  <p class="part-lede">The target shape of the finished add-on: four layers with a strict direction of control, a small set of data types, one evaluation pipeline per frame, and a package layout that replaces the single 3,000-line file.</p>
+</div>
+<div class="toc-part">
+  <div>3.1 Design principles</div><div>3.2 The four-layer model</div>
+  <div>3.3 Data model</div><div>3.4 Per-frame evaluation pipeline</div>
+  <div>3.5 Package layout</div><div>3.6 Where state lives</div>
+  <div>3.7 Architecture decisions</div>
+</div>
+
+<h2>3.1 Design principles</h2>
+<p>Every principle below comes from a decision already made during the sessions. They are written down here so new code can be checked against them.</p>
+<table>
+  <thead><tr><th style="width:30%">Principle</th><th>In practice</th></tr></thead>
+  <tbody>
+    <tr><td><b>The mesh is never bolted to the mechanism</b></td><td>The add-on moves <i>roots and pivots</i>. The rig reads them through constraints, and meshes parent to the rig. Swap a mesh, keep the rig. Swap a rig, keep the mechanism.</td></tr>
+    <tr><td><b>Blender does the geometry</b></td><td>Wherever possible the add-on only sets <i>numbers</i> (offset_factor, influence, distance) and lets Follow Path, Copy Transforms and Damped Track do the maths. It is inspectable, keyframeable, and banking comes for free.</td></tr>
+    <tr><td><b>Distance is the currency</b></td><td>Pivot offsets, coupling gaps, wheel rotation and route history are all real metres. Factors are only ever computed at the last moment, per curve.</td></tr>
+    <tr><td><b>Crash-safe live control</b></td><td>No constraint writes from handlers during a modal 3D transform. Live control goes through N-panel widgets (Drag Slider, Drag Pad) or the add-on's own modal operators.</td></tr>
+    <tr><td><b>Deterministic playback</b></td><td>The same frame must give the same pose no matter what is selected, whether you scrub forwards or backwards, or whether it's the viewport or a render farm.</td></tr>
+    <tr><td><b>No guessing at forks</b></td><td>Curves change only where a decision was recorded or the continuation is unique. Proximity alone never switches a train (the lesson of v8 §4.2).</td></tr>
+    <tr><td><b>Everything reversible</b></td><td>Detach keeps constraints, Remove Switch confirms with real counts, and every operator is undoable.</td></tr>
+  </tbody>
+</table>
+
+<h2>3.2 The four-layer model</h2>
+<figure>
+<svg viewBox="0 0 700 430">
+  <defs><marker id="d1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="#1d232b"/></marker></defs>
+  <!-- layer 1 -->
+  <rect x="10" y="10" width="520" height="86" rx="8" fill="#e3ecf8" stroke="#2a5d9f" stroke-width="1.5"/>
+  <text x="24" y="32" class="tb" fill="#2a5d9f">① TRACK LAYER</text>
+  <text x="24" y="50" class="t">Curves (one spline each) · Track Network graph · Turnouts / junctions with state</text>
+  <text x="24" y="66" class="ts">Owned by: the track builder. Changes rarely. Cached: arc tables, connectivity.</text>
+  <text x="24" y="84" class="ts">Answers: “where is metre 312.5 of route X, and which way is forward there?”</text>
+  <!-- layer 2 -->
+  <rect x="10" y="114" width="520" height="96" rx="8" fill="#fbf1df" stroke="#c07a12" stroke-width="1.5"/>
+  <text x="24" y="136" class="tb" fill="#c07a12">② MECHANISM LAYER (the add-on drives this)</text>
+  <text x="24" y="154" class="t">Vehicle roots · pivot Empties · consist members · route distance · route plan</text>
+  <text x="24" y="170" class="ts">Every object here carries Follow Path constraints. The add-on writes only</text>
+  <text x="24" y="184" class="ts">offset_factor / influence / target. Users don't pose these; they may animate</text>
+  <text x="24" y="198" class="ts">the one Motion channel (route distance) and turnout states.</text>
+  <!-- layer 3 -->
+  <rect x="10" y="228" width="520" height="96" rx="8" fill="#eee8f8" stroke="#6a4aa5" stroke-width="1.5"/>
+  <text x="24" y="250" class="tb" fill="#6a4aa5">③ CONTROL RIG LAYER (the artist animates this)</text>
+  <text x="24" y="268" class="t">Armature: frame, bogies/trucks, wheels, rods, valve gear, suspension, sway</text>
+  <text x="24" y="284" class="ts">Bones follow mechanism Empties via Copy Transforms / Damped Track. Wheel spin is</text>
+  <text x="24" y="298" class="ts">driven from distance (Auto) or hand-keyed (Direct). Secondary motion is additive</text>
+  <text x="24" y="312" class="ts">on top, so it never feeds back into the mechanism.</text>
+  <!-- layer 4 -->
+  <rect x="10" y="342" width="520" height="78" rx="8" fill="#f4f6f9" stroke="#5b6673" stroke-width="1.5"/>
+  <text x="24" y="364" class="tb">④ VISUAL LAYER</text>
+  <text x="24" y="382" class="t">Meshes, materials, smoke/steam emitters, cameras mounted on the train</text>
+  <text x="24" y="398" class="ts">Parented to rig bones (Bone parent) or with Armature modifier. Replaceable at any time</text>
+  <text x="24" y="412" class="ts">(proxy blocks → final model) without touching layers ①–③.</text>
+  <!-- arrows -->
+  <line x1="270" y1="96" x2="270" y2="112" stroke="#1d232b" stroke-width="2" marker-end="url(#d1)"/>
+  <line x1="270" y1="210" x2="270" y2="226" stroke="#1d232b" stroke-width="2" marker-end="url(#d1)"/>
+  <line x1="270" y1="324" x2="270" y2="340" stroke="#1d232b" stroke-width="2" marker-end="url(#d1)"/>
+  <!-- side notes -->
+  <rect x="548" y="10" width="142" height="410" rx="8" fill="#fff" stroke="#d5dbe2"/>
+  <text x="560" y="32" class="tb">Direction of control</text>
+  <text x="560" y="52" class="ts">Data flows <tspan font-weight="bold">down only</tspan>.</text>
+  <text x="560" y="66" class="ts">Nothing below writes</text>
+  <text x="560" y="80" class="ts">back into a layer above.</text>
+  <text x="560" y="110" class="tb">What users key</text>
+  <text x="560" y="130" class="ts">• Route distance (m)</text>
+  <text x="560" y="144" class="ts">• Turnout states</text>
+  <text x="560" y="158" class="ts">• Coupled / uncoupled</text>
+  <text x="560" y="172" class="ts">• Rig controls</text>
+  <text x="560" y="186" class="ts">  (wheel mode, slip,</text>
+  <text x="560" y="200" class="ts">  sway amount, doors…)</text>
+  <text x="560" y="230" class="tb">Why it matters</text>
+  <text x="560" y="250" class="ts">The mine-cart example:</text>
+  <text x="560" y="264" class="ts">the add-on moves the</text>
+  <text x="560" y="278" class="ts">cart along the track;</text>
+  <text x="560" y="292" class="ts">the cart's own rig adds</text>
+  <text x="560" y="306" class="ts">wobble, wheel slip and</text>
+  <text x="560" y="320" class="ts">suspension; the mesh</text>
+  <text x="560" y="334" class="ts">can be swapped any time.</text>
+</svg>
+<figcaption><b>Figure 3.1</b> The layer stack. The existing add-on implements ① (curves only) and ② (root, pivots, wagons). Layers ③ and ④ are new work (Parts 6, 7, 9, 10).</figcaption>
+</figure>
+
+<h2>3.3 Data model</h2>
+<p>Six types cover the whole system. Blender-side they are <code>PropertyGroup</code>s on the scene or on objects, plus a few managed objects. Each carries a stable <code>uid</code> string, so renames never break links (audit issue #8).</p>
+<figure>
+<svg viewBox="0 0 700 470">
+  <defs><marker id="d2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" fill="#5b6673"/></marker></defs>
+  <g font-size="10">
+  <!-- TrackNetwork -->
+  <rect x="10" y="10" width="215" height="140" rx="6" fill="#fff" stroke="#2a5d9f" stroke-width="1.5"/>
+  <rect x="10" y="10" width="215" height="24" rx="6" fill="#2a5d9f"/><text x="20" y="27" class="tw">TrackNetwork (Scene)</text>
+  <text x="20" y="50" class="mono">segments[]    → TrackSegment</text>
+  <text x="20" y="65" class="mono">junctions[]   → Junction</text>
+  <text x="20" y="80" class="mono">snap_tolerance  0.05 m</text>
+  <text x="20" y="95" class="mono">overlap_min     auto</text>
+  <text x="20" y="110" class="mono">dirty: bool (rebuild)</text>
+  <text x="20" y="132" class="ts">Built by “Scan Track”; rebuilt when</text>
+  <text x="20" y="144" class="ts">any segment's geometry hash changes.</text>
+  <!-- TrackSegment -->
+  <rect x="245" y="10" width="215" height="140" rx="6" fill="#fff" stroke="#2a5d9f" stroke-width="1.5"/>
+  <rect x="245" y="10" width="215" height="24" rx="6" fill="#2a5d9f"/><text x="255" y="27" class="tw">TrackSegment</text>
+  <text x="255" y="50" class="mono">uid, curve: Object</text>
+  <text x="255" y="65" class="mono">length (m), geo_hash</text>
+  <text x="255" y="80" class="mono">end_0 / end_1 links</text>
+  <text x="255" y="95" class="mono">overlaps[]: span on other</text>
+  <text x="255" y="110" class="mono">speed_limit, gauge (opt.)</text>
+  <text x="255" y="132" class="ts">One per curve object. Arc table is a</text>
+  <text x="255" y="144" class="ts">cache keyed by (uid, geo_hash).</text>
+  <!-- Junction -->
+  <rect x="480" y="10" width="210" height="140" rx="6" fill="#fff" stroke="#2f7d4f" stroke-width="1.5"/>
+  <rect x="480" y="10" width="210" height="24" rx="6" fill="#2f7d4f"/><text x="490" y="27" class="tw">Junction  (NEW)</text>
+  <text x="490" y="50" class="mono">uid, kind: JOINT | TURNOUT</text>
+  <text x="490" y="65" class="mono">       | CROSSING</text>
+  <text x="490" y="80" class="mono">through / diverge legs</text>
+  <text x="490" y="95" class="mono">state: int  (keyframeable)</text>
+  <text x="490" y="110" class="mono">lever: Object (optional)</text>
+  <text x="490" y="132" class="ts">The switch lives on the track,</text>
+  <text x="490" y="144" class="ts">as on a real railway (Part 5).</text>
+  <!-- VehicleDef -->
+  <rect x="10" y="180" width="215" height="160" rx="6" fill="#fff" stroke="#6a4aa5" stroke-width="1.5"/>
+  <rect x="10" y="180" width="215" height="24" rx="6" fill="#6a4aa5"/><text x="20" y="197" class="tw">VehicleDef (asset)</text>
+  <text x="20" y="220" class="mono">name, type, length</text>
+  <text x="20" y="235" class="mono">pivots[]: role, offset,</text>
+  <text x="20" y="250" class="mono">         bone, radius_arm</text>
+  <text x="20" y="265" class="mono">wheel_groups[]: bones,</text>
+  <text x="20" y="280" class="mono">         diameter, mode</text>
+  <text x="20" y="295" class="mono">couplers: front/rear (m)</text>
+  <text x="20" y="310" class="mono">rig: Object, body_bone</text>
+  <text x="20" y="330" class="ts">Saved with the asset; describes a model.</text>
+  <!-- VehicleInstance -->
+  <rect x="245" y="180" width="215" height="160" rx="6" fill="#fff" stroke="#c07a12" stroke-width="1.5"/>
+  <rect x="245" y="180" width="215" height="24" rx="6" fill="#c07a12"/><text x="255" y="197" class="tw">Vehicle (root object)</text>
+  <text x="255" y="220" class="mono">uid, def → VehicleDef</text>
+  <text x="255" y="235" class="mono">pivots[] → Empty objects</text>
+  <text x="255" y="250" class="mono">facing: +1 / −1</text>
+  <text x="255" y="265" class="mono">consist → Consist | None</text>
+  <text x="255" y="280" class="mono">(standalone) distance,</text>
+  <text x="255" y="295" class="mono">   route_plan</text>
+  <text x="255" y="310" class="mono">wheel_mode per group</text>
+  <text x="255" y="330" class="ts">What exists today, generalised.</text>
+  <!-- Consist -->
+  <rect x="480" y="180" width="210" height="160" rx="6" fill="#fff" stroke="#c07a12" stroke-width="1.5"/>
+  <rect x="480" y="180" width="210" height="24" rx="6" fill="#c07a12"/><text x="490" y="197" class="tw">Consist (train)</text>
+  <text x="490" y="220" class="mono">uid, name</text>
+  <text x="490" y="235" class="mono">members[]: vehicle,</text>
+  <text x="490" y="250" class="mono">   gap (m), coupled,</text>
+  <text x="490" y="265" class="mono">   facing</text>
+  <text x="490" y="280" class="mono">distance  ← MOTION CHANNEL</text>
+  <text x="490" y="295" class="mono">anchor: member index</text>
+  <text x="490" y="310" class="mono">route_plan → RoutePlan</text>
+  <text x="490" y="330" class="ts">A lone vehicle = consist of one.</text>
+  <!-- RoutePlan -->
+  <rect x="130" y="370" width="440" height="92" rx="6" fill="#fff" stroke="#2f7d4f" stroke-width="1.5"/>
+  <rect x="130" y="370" width="440" height="24" rx="6" fill="#2f7d4f"/><text x="140" y="387" class="tw">RoutePlan (NEW; replaces keyframe-mining + odometer log)</text>
+  <text x="140" y="410" class="mono">start: segment uid + offset + direction  (at distance 0)</text>
+  <text x="140" y="425" class="mono">route = walk the network from start, taking each junction's</text>
+  <text x="140" y="440" class="mono">        state at the current frame → ordered list of spans</text>
+  <text x="140" y="455" class="mono">spans[]: segment, enter_d, exit_d, dir   (cached per frame)</text>
+  <!-- links -->
+  <line x1="225" y1="80" x2="243" y2="80" stroke="#5b6673" marker-end="url(#d2)"/>
+  <line x1="460" y1="80" x2="478" y2="80" stroke="#5b6673" marker-end="url(#d2)"/>
+  <line x1="225" y1="260" x2="243" y2="260" stroke="#5b6673" marker-end="url(#d2)"/>
+  <line x1="480" y1="260" x2="462" y2="260" stroke="#5b6673" marker-end="url(#d2)"/>
+  <line x1="585" y1="340" x2="500" y2="368" stroke="#5b6673" marker-end="url(#d2)"/>
+  <line x1="350" y1="150" x2="350" y2="368" stroke="#5b6673" stroke-dasharray="4 3" marker-end="url(#d2)"/>
+  </g>
+</svg>
+<figcaption><b>Figure 3.2</b> Target data model. Green types are new. Amber types exist today in early form (<code>track_it_vehicle_pivots</code>, <code>track_it_consist_wagons</code>, <code>track_it_consist_history</code>).</figcaption>
+</figure>
+
+<div class="callout c-idea"><div class="tag">The key simplification</div>
+<p>Today each vehicle keeps its own history of where it went. In the target model <b>the train's route is recomputed from two things: where it started, and what the turnouts were set to at each frame</b>. Anything along the train (root, pivot, wagon, tender bogie) is then “the route at distance <i>d − offset</i>”. There is no history to go stale, no drift, and no per-wagon fork decisions. Part 5 explains the idea in full; Part 8 applies it to consists.</p></div>
+
+<h2>3.4 Per-frame evaluation pipeline</h2>
+<figure>
+<svg viewBox="0 0 700 360">
+  <defs><marker id="d3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" fill="#5b6673"/></marker></defs>
+  <g>
+    <rect x="10" y="10" width="200" height="60" rx="6" fill="#f4f6f9" stroke="#d5dbe2"/>
+    <text x="20" y="30" class="tb">1 · Read inputs</text><text x="20" y="46" class="ts">consist.distance (F-curve or live),</text><text x="20" y="60" class="ts">junction states at this frame</text>
+    <rect x="250" y="10" width="200" height="60" rx="6" fill="#e3ecf8" stroke="#b9cde8"/>
+    <text x="260" y="30" class="tb">2 · Build route</text><text x="260" y="46" class="ts">walk network from start through</text><text x="260" y="60" class="ts">junction states → spans (cached)</text>
+    <rect x="490" y="10" width="200" height="60" rx="6" fill="#fbf1df" stroke="#ecd3a6"/>
+    <text x="500" y="30" class="tb">3 · Place every point</text><text x="500" y="46" class="ts">for each member and pivot:</text><text x="500" y="60" class="ts">d_point = d − Σgaps − pivot_offset</text>
+    <rect x="490" y="100" width="200" height="74" rx="6" fill="#fbf1df" stroke="#ecd3a6"/>
+    <text x="500" y="120" class="tb">4 · Resolve to curves</text><text x="500" y="136" class="ts">span containing d_point → segment,</text><text x="500" y="150" class="ts">local metres → offset_factor;</text><text x="500" y="164" class="ts">set that constraint's influence 1</text>
+    <rect x="250" y="100" width="200" height="74" rx="6" fill="#e3ecf8" stroke="#b9cde8"/>
+    <text x="260" y="120" class="tb">5 · Blender evaluates</text><text x="260" y="136" class="ts">Follow Path → Empties placed with</text><text x="260" y="150" class="ts">heading + tilt; rig bones follow via</text><text x="260" y="164" class="ts">Copy Transforms / Damped Track</text>
+    <rect x="10" y="100" width="200" height="74" rx="6" fill="#eee8f8" stroke="#d2c6ea"/>
+    <text x="20" y="120" class="tb">6 · Rig drivers</text><text x="20" y="136" class="ts">wheel angle = d_point ÷ r (Auto)</text><text x="20" y="150" class="ts">rods follow crank pins; sway/hunt</text><text x="20" y="164" class="ts">from speed & curvature (additive)</text>
+    <line x1="210" y1="40" x2="248" y2="40" stroke="#5b6673" marker-end="url(#d3)"/>
+    <line x1="450" y1="40" x2="488" y2="40" stroke="#5b6673" marker-end="url(#d3)"/>
+    <line x1="590" y1="70" x2="590" y2="98" stroke="#5b6673" marker-end="url(#d3)"/>
+    <line x1="490" y1="137" x2="452" y2="137" stroke="#5b6673" marker-end="url(#d3)"/>
+    <line x1="250" y1="137" x2="212" y2="137" stroke="#5b6673" marker-end="url(#d3)"/>
+  </g>
+  <rect x="10" y="200" width="680" height="150" rx="8" fill="#fff" stroke="#d5dbe2"/>
+  <text x="22" y="222" class="tb">Where each step runs</text>
+  <g class="t">
+    <text x="22" y="244">Steps 1–4: one Python function, <tspan class="mono">evaluate_all(scene, frame)</tspan>, for <tspan font-weight="bold">every</tspan> consist, called from:</text>
+    <text x="40" y="262">• <tspan font-weight="bold">frame_change_pre</tspan>: playback, scrubbing, and renders (runs before the depsgraph)</text>
+    <text x="40" y="279">• Drag Slider / Drag Pad callbacks: live driving, writes consist.distance first</text>
+    <text x="40" y="296">• operators (Attach, Switch, Couple…), <tspan font-weight="bold">never</tspan> a handler during a modal 3D transform</text>
+    <text x="22" y="318">Steps 5–6: pure Blender (constraints + drivers). No Python, so they evaluate identically in the viewport,</text>
+    <text x="22" y="334">in F12 renders and in background (<tspan class="mono">blender -b</tspan>) renders.</text>
+  </g>
+</svg>
+<figcaption><b>Figure 3.3</b> The target pipeline. The expensive parts (route building, arc tables) are cached and only redone when the inputs change.</figcaption>
+</figure>
+
+<div class="callout c-warn"><div class="tag">Render farms</div>
+<p>Handlers are Python, and some render setups run with scripts disabled (“Auto Run Python Scripts” off) or on machines without the add-on. The pipeline should offer <b>Bake Train Motion</b>: write the resolved offset_factor and influence keys for every managed object over a frame range, so the scene plays back with the add-on turned off. See Part 7 §7.8.</p></div>
+
+<h2>3.5 Package layout</h2>
+<p>Blender loads a folder with <code>__init__.py</code> as one add-on (or as an Extension, the Blender 4.2+ format with <code>blender_manifest.toml</code>). Splitting by layer keeps each file small and testable:</p>
+<pre>track_it/
+  blender_manifest.toml      # extension metadata (replaces bl_info), min Blender 4.4 / 5.x
+  __init__.py                # register()/unregister() only
+  core/
+    arc.py                   # arc tables from the evaluated polyline, cache keyed by (uid, geo_hash)
+    spatial.py               # KD-tree per segment, nearest point/offset queries
+    network.py               # TrackNetwork scan: joints, overlaps, turnouts, validation
+    route.py                 # RoutePlan walk, distance → (segment, factor, heading)
+  mechanism/
+    vehicle.py               # root, pivots, facing, constraint management by uid
+    consist.py               # members, gaps, coupling, anchor
+    evaluate.py              # evaluate_all(): the per-frame pipeline (steps 1–4)
+    bake.py                  # Bake Train Motion / Clear Bake
+  rig/
+    wheels.py                # Auto/Direct/Slip drivers, radius per group
+    secondary.py             # sway, hunting, suspension, rail-joint bumps
+    bind.py                  # connect rig bones to pivots (Copy Transforms etc.)
+  assets/
+    vehicle_def.py           # VehicleDef read/write, asset metadata
+    wizard.py                # “Make Vehicle” guided setup (Part 9)
+  drive/
+    slider.py  pad.py        # live controls (Drag Pad = crash-safe mouse drive)
+  ui/
+    panels.py  lists.py  hud.py  overlays.py
+  ops/                       # thin operators that call into the modules above
+  handlers.py                # frame_change_pre, load_post, undo_post (rebuild caches)
+  tests/                     # headless tests: blender -b -P tests/run.py
+</pre>
+
+<h2>3.6 Where state lives</h2>
+<table>
+  <thead><tr><th style="width:28%">State</th><th style="width:24%">Stored in</th><th>Notes</th></tr></thead>
+  <tbody>
+    <tr><td>Track Network, Junctions</td><td>Scene PropertyGroup</td><td>Saved in the .blend. Rebuilt on demand, or flagged dirty on geometry change.</td></tr>
+    <tr><td>Junction state</td><td>IntProperty (keyframeable)</td><td>Constant-interpolation F-curve, which is the switch history. Visible in the Dope Sheet.</td></tr>
+    <tr><td>Consist distance</td><td>FloatProperty (keyframeable)</td><td>The one Motion channel. Ease it in the Graph Editor to get acceleration and braking.</td></tr>
+    <tr><td>Vehicle / pivot / member data</td><td>Object PropertyGroups</td><td>As today, plus <code>uid</code>. Clear these on duplicate (audit #4).</td></tr>
+    <tr><td>Follow Path constraints</td><td>On managed objects</td><td>Outputs of the pipeline. Keyframes on them only appear after a Bake.</td></tr>
+    <tr><td>Arc tables, KD-trees, route spans</td><td>Python cache</td><td>Rebuilt on <code>load_post</code> / <code>undo_post</code> / hash change. Never trusted blindly.</td></tr>
+    <tr><td>HUD message, live-drag timing</td><td>Python module globals</td><td>UI-only, safe to lose.</td></tr>
+  </tbody>
+</table>
+
+<h2>3.7 Architecture decisions</h2>
+<table>
+  <thead><tr><th style="width:30%">Decision</th><th style="width:38%">Recommendation</th><th>Trade-off</th></tr></thead>
+  <tbody>
+    <tr><td>Keep Follow Path, or position Empties directly?</td><td><b>Keep Follow Path.</b> It gives banking, is inspectable and bakeable, and matches Blender's own curve sampling.</td><td>One constraint per curve per object, managed by uid (that is already the model).</td></tr>
+    <tr><td>Motion channel: keyed offset_factor or keyed distance?</td><td><b>Keyed distance on the Consist</b> (Part 7). Offsets become outputs.</td><td>Existing keyframed scenes need a one-time migration operator.</td></tr>
+    <tr><td>History: keyframe mining, odometer log, or Route Plan?</td><td><b>Route Plan</b>: start point + keyframed junction states.</td><td>Replaces a lot of working code, so do it in Phase 3, after the Track Network exists.</td></tr>
+    <tr><td>Evaluate only the active object, or everything?</td><td><b>Everything</b>, every frame, in <code>frame_change_pre</code>.</td><td>Needs the caching work (arc tables, KD-trees) to stay fast.</td></tr>
+    <tr><td>Single file or package?</td><td><b>Package / Extension.</b></td><td>Installation changes from a .py file to a .zip, one time.</td></tr>
+    <tr><td>Rig: armature per vehicle, or Empties only?</td><td><b>Armature per vehicle</b> (Part 6): bones are what animators expect.</td><td>A mine cart can use a tiny 3-bone rig. The system doesn't need a complex rig.</td></tr>
+  </tbody>
+</table>
+</body></html>

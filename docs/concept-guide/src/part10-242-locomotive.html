@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Part 10 · Concept study: 2-4-2 + tender</title>
+<link rel="stylesheet" href="style.css"></head>
+<body data-footer="Part 10 · Concept study: 2-4-2 + tender">
+
+<div class="opener">
+  <div class="part-kicker">Part 10 · Concept study</div>
+  <h1 class="part-title">Rigging a 2-4-2 steam locomotive with a two-bogie tender</h1>
+  <p class="part-lede">The hardest vehicle in the plan, from the first vehicle-architecture session: taking an <b>unrigged</b> 2-4-2 and its tender, deciding what tracks the rail and what is rigid, building the rig (trucks, drivers, rods, valve gear), and bringing both into the Track It framework as a coupled pair.</p>
+</div>
+<div class="toc-part">
+  <div>10.1 Meet the locomotive</div><div>10.2 Loco and tender: one vehicle or two?</div>
+  <div>10.3 Mechanism plan</div><div>10.4 How the frame is solved</div>
+  <div>10.5 Pony and trailing trucks</div><div>10.6 Wheels and quartering</div>
+  <div>10.7 Rods and valve gear</div><div>10.8 The tender</div>
+  <div>10.9 Complete bone hierarchy</div><div>10.10 Walkthrough: unrigged → in the framework</div>
+  <div>10.11 Pitfalls and checks</div><div>10.12 What this study adds to the backlog</div>
+</div>
+<p class="small">All dimensions are an <b>illustrative prototype</b> chosen to be plausible for a small standard-gauge engine. Measure your own model (Part 9, step 3).</p>
+
+<h2>10.1 Meet the locomotive</h2>
+<figure>
+<svg viewBox="0 0 700 260">
+  <line x1="5" y1="200" x2="695" y2="200" stroke="#2a5d9f" stroke-width="3"/>
+  <!-- tender -->
+  <rect x="13.2" y="108" width="254.4" height="56" rx="6" fill="#5b6673"/>
+  <rect x="29.6" y="166" width="68" height="9" fill="#c07a12"/><rect x="183.2" y="166" width="68" height="9" fill="#c07a12"/>
+  <circle cx="38.0" cy="184.5" r="15.5" fill="#fff" stroke="#1d232b" stroke-width="3"/><circle cx="38.0" cy="184.5" r="2.5" fill="#1d232b"/><circle cx="89.2" cy="184.5" r="15.5" fill="#fff" stroke="#1d232b" stroke-width="3"/><circle cx="89.2" cy="184.5" r="2.5" fill="#1d232b"/><circle cx="191.6" cy="184.5" r="15.5" fill="#fff" stroke="#1d232b" stroke-width="3"/><circle cx="191.6" cy="184.5" r="2.5" fill="#1d232b"/><circle cx="242.8" cy="184.5" r="15.5" fill="#fff" stroke="#1d232b" stroke-width="3"/><circle cx="242.8" cy="184.5" r="2.5" fill="#1d232b"/>
+  <line x1="271.6" y1="158" x2="281.2" y2="158" stroke="#1d232b" stroke-width="4"/>
+  <!-- loco -->
+  <rect x="300.4" y="150" width="348.8" height="10" fill="#1d232b"/>
+  <rect x="412.4" y="98" width="227.2" height="52" rx="10" fill="#5b6673"/>
+  <rect x="614.0" y="94" width="25.6" height="56" rx="4" fill="#44494f"/>
+  <rect x="620.4" y="66" width="14" height="30" fill="#1d232b"/>
+  <rect x="508.4" y="84" width="26" height="16" rx="8" fill="#44494f"/>
+  <rect x="303.6" y="70" width="108.8" height="80" rx="3" fill="#1d232b"/>
+  <rect x="294.0" y="64" width="124.8" height="8" rx="2" fill="#1d232b"/>
+  <rect x="572.4" y="152" width="54.4" height="22" rx="3" fill="#6a4aa5"/>
+  <circle cx="343.6" cy="184.5" r="15.5" fill="#fff" stroke="#1d232b" stroke-width="3"/><circle cx="343.6" cy="184.5" r="2.5" fill="#1d232b"/><circle cx="596.4" cy="184.5" r="15.5" fill="#fff" stroke="#1d232b" stroke-width="3"/><circle cx="596.4" cy="184.5" r="2.5" fill="#1d232b"/><circle cx="436.4" cy="172.3" r="27.7" fill="#fff" stroke="#1d232b" stroke-width="4"/><circle cx="436.4" cy="172.3" r="2.5" fill="#1d232b"/><circle cx="503.6" cy="172.3" r="27.7" fill="#fff" stroke="#1d232b" stroke-width="4"/><circle cx="503.6" cy="172.3" r="2.5" fill="#1d232b"/>
+  <line x1="444.4" y1="178.3" x2="511.6" y2="178.3" stroke="#c07a12" stroke-width="4"/>
+  <line x1="576.4" y1="163" x2="511.6" y2="178.3" stroke="#c07a12" stroke-width="3"/>
+  <!-- dimension ticks -->
+  <g stroke="#b3372f" stroke-width="1">
+    <line x1="470.0" y1="206" x2="470.0" y2="214"/>
+  </g>
+  <text x="448.0" y="225" class="ts" fill="#b3372f">reference 0</text>
+  <!-- labels -->
+  <g class="ts">
+    <text x="566.4" y="242">pony truck</text><text x="566.4" y="254">+3.95 · Ø0.97</text>
+    <text x="406.4" y="242">drivers ±1.05 · Ø1.73</text><text x="406.4" y="254">(coupled by rods)</text>
+    <text x="313.6" y="242">trailing truck</text><text x="313.6" y="254">−3.95 · Ø0.97</text>
+    <text x="30.4" y="242">tender: bogies ±2.40, wheelsets ±0.80 in each, Ø0.97</text>
+    <text x="632" y="168" fill="#6a4aa5">cylinder</text>
+    <text x="265.2" y="140">drawbar</text>
+    <text x="306.8" y="60">cab</text><text x="502.0" y="80">dome</text><text x="610.8" y="60">chimney</text>
+  </g>
+  <line x1="278.0" y1="144" x2="276.4" y2="156" stroke="#5b6673"/>
+  <text x="418.8" y="30" class="tb">2-4-2 locomotive</text><text x="100.4" y="30" class="tb">tender</text>
+  <text x="418.8" y="46" class="ts">2 leading · 4 driving · 2 trailing (Whyte) · drawn to scale</text>
+</svg>
+<figcaption><b>Figure 10.1</b> Side elevation, front to the right. Only four parts touch the rail independently on the loco: the two trucks and the two driving axles. The rest hangs off the frame.</figcaption>
+</figure>
+
+<table>
+  <thead><tr><th style="width:30%">Loco dimension (illustrative)</th><th class="num" style="width:18%">Value</th><th>Measured from the loco reference (centre of driving wheelbase)</th></tr></thead>
+  <tbody>
+    <tr><td>Leading truck axle</td><td class="num">+3.95 m</td><td>Pony truck pin (on frame): +2.60 m → radius arm 1.35 m</td></tr>
+    <tr><td>Driving axle 1 / 2</td><td class="num">±1.05 m</td><td>Rigid driving wheelbase 2.10 m</td></tr>
+    <tr><td>Trailing truck axle</td><td class="num">−3.95 m</td><td>Pin −2.60 m</td></tr>
+    <tr><td>Couplers front / rear</td><td class="num">+5.90 / −5.90 m</td><td>Rear = drawbar pin to the tender</td></tr>
+    <tr><td>Crank radius / main rod</td><td class="num">0.30 / 2.40 m</td><td>Stroke 0.60 m; the crosshead travels 2.10–2.70 m from the crank centre</td></tr>
+  </tbody>
+</table>
+
+<h2>10.2 Loco and tender: one vehicle or two?</h2>
+<div class="grid2">
+<div class="card"><h4>Two vehicles, coupled ✓ (recommended)</h4>
+<ul class="small" style="color:#1d232b"><li>The tender swings on its own drawbar, as in reality.</li><li>It reuses the ordinary bogie-car template.</li><li>Tender-first running, or uncoupling for servicing, comes for free (Part 8).</li><li>The pair can be published as a <b>consist preset</b> asset, so it drops in as a unit.</li></ul></div>
+<div class="card"><h4>One vehicle with six pivots</h4>
+<ul class="small" style="color:#1d232b"><li>Simpler outliner.</li><li>But the tender's body then has to be solved from pivots inside a loco-vehicle. That means a second body, which the data model doesn't have.</li><li>Uncoupling becomes impossible.</li></ul></div>
+</div>
+
+<h2>10.3 Mechanism plan</h2>
+<table>
+  <thead><tr><th style="width:18%">Vehicle</th><th style="width:22%">Pivot</th><th style="width:14%">Role</th><th class="num" style="width:12%">Offset</th><th>Drives rig bone</th></tr></thead>
+  <tbody>
+    <tr><td rowspan="4">Loco</td><td>LEAD_TRUCK</td><td>RADIAL</td><td class="num">+3.95</td><td>TRUCK_F (aims at pin +2.60 on FRAME)</td></tr>
+    <tr><td>DRIVER_1</td><td>AXLE_POINT</td><td class="num">+1.05</td><td>FRAME (front end of chord)</td></tr>
+    <tr><td>DRIVER_2</td><td>AXLE_POINT</td><td class="num">−1.05</td><td>FRAME (rear end of chord)</td></tr>
+    <tr><td>TRAIL_TRUCK</td><td>RADIAL</td><td class="num">−3.95</td><td>TRUCK_R (aims at pin −2.60)</td></tr>
+    <tr><td rowspan="2">Tender</td><td>BOGIE_F</td><td>TRACKED</td><td class="num">+2.40</td><td>T_BOGIE_F</td></tr>
+    <tr><td>BOGIE_R</td><td>TRACKED</td><td class="num">−2.40</td><td>T_BOGIE_R</td></tr>
+  </tbody>
+</table>
+<p>Consist: <code>[Loco (facing +1), Tender (gap 0.30 m)]</code>. Tender couplers ±4.10 m.</p>
+
+<h2>10.4 How the frame is solved</h2>
+<p>On a real engine the <b>rigid driving wheelbase</b> sets the frame's line; the trucks swing underneath. So the frame is placed on the <b>chord</b> between the two driver axle points (the same technique as the coach body in Part 6 §6.4):</p>
+<figure>
+<svg viewBox="0 0 700 200">
+  <path d="M20 198.9 A600 600 0 0 1 680 198.9" fill="none" stroke="#2a5d9f" stroke-width="3"/>
+  <rect x="150" y="96" width="400" height="14" fill="#1d232b" opacity=".12"/>
+  <line x1="120" y1="103.0" x2="580" y2="103.0" stroke="#1d232b" stroke-width="1.5" stroke-dasharray="6 4"/>
+  <line x1="290" y1="103.0" x2="410" y2="103.0" stroke="#1d232b" stroke-width="3"/>
+  <circle cx="290" cy="103.0" r="6" fill="#c07a12"/><circle cx="410" cy="103.0" r="6" fill="#c07a12"/>
+  <circle cx="215" cy="103.0" r="5" fill="#6a4aa5"/><circle cx="485" cy="103.0" r="5" fill="#6a4aa5"/>
+  <line x1="160" y1="130.9" x2="215" y2="103.0" stroke="#6a4aa5" stroke-width="3"/>
+  <line x1="540" y1="130.9" x2="485" y2="103.0" stroke="#6a4aa5" stroke-width="3"/>
+  <circle cx="160" cy="130.9" r="6" fill="#c07a12"/><circle cx="540" cy="130.9" r="6" fill="#c07a12"/>
+  <g class="ts">
+    <text x="296" y="90">D2</text><text x="398" y="90">D1</text>
+    <text x="300" y="130">chord D2 → D1 = FRAME line</text>
+    <text x="470" y="90" fill="#6a4aa5">pin (+2.60)</text><text x="190" y="90" fill="#6a4aa5">pin (−2.60)</text>
+    <text x="560" y="140">lead axle on rail (+3.95)</text><text x="40" y="140">trail axle on rail (−3.95)</text>
+  </g>
+  <text x="20" y="20" class="t">Beyond the chord ends the rail curves <tspan font-weight="bold">inward</tspan>, so each truck axle sits inside the frame line and</text>
+  <text x="20" y="36" class="t">the truck swings. On R = 120 m that is 0.06 m at the axle, a truck angle of about 1.6° (curve exaggerated here).</text>
+</svg>
+<figcaption><b>Figure 10.2</b> Plan view on a curve. FRAME: Copy Location D1 (1.0) + D2 (0.5) → midpoint; Damped Track → D1; banking averaged from D1 and D2.</figcaption>
+</figure>
+
+<h2>10.5 Pony and trailing trucks</h2>
+<p>A pony truck is an axle on a <b>radius arm</b> pivoting on a pin fixed to the frame. The rig reproduces exactly that:</p>
+<pre>TRUCK_F   (child of nothing; driven entirely by constraints)
+  Copy Location  → LEAD_TRUCK Empty           axle stays on the rail
+  Damped Track   → FRAME, head/tail offset to the pin (+2.60)   arm points at the pin
+                   (or: a PIN_F bone, child of FRAME at +2.60, as the Damped Track target)
+  Copy Rotation  → LEAD_TRUCK Empty, roll only           takes the rail's cant
+WHL_F_L / WHL_F_R   (children of TRUCK_F) : rotation from Auto driver, Ø 0.97 m</pre>
+<div class="callout c-rig"><div class="tag">Why not just Copy Transforms from the Empty?</div>
+<p>The Empty's heading is the <b>rail tangent</b> at the axle, which is correct for the wheelset but not for the truck frame. The truck frame must point at its pin, otherwise the radius arm visibly detaches from the loco frame on curves. Use the Empty for position and roll, and the pin for yaw.</p></div>
+
+<h2>10.6 Wheels and quartering</h2>
+<ul>
+  <li><b>Two wheel groups</b>: drivers (Ø 1.73 m, r = 0.865 m) and trucks (Ø 0.97 m, r = 0.485 m). Same distance, different rotation rates, both from the Auto driver <code>d / r</code>.</li>
+  <li>All four drivers share <b>one angle</b> (they are coupled by rods). Drive DRIVERS_ANGLE once, and let each driver bone copy it, so a slip animation spins them together.</li>
+  <li><b>Quartering</b>: the right-hand crank pins sit 90° ahead of the left-hand ones (a common convention, check your prototype). Build it into the crank pin placement (the right side bone rotated +90°), not into the drivers, so wheel rotation stays a single value.</li>
+</ul>
+
+<h2>10.7 Rods and valve gear</h2>
+<h3>Coupling rods</h3>
+<p>The coupling rod joins the crank pins of D1 and D2. Because both pins turn together, the rod <b>translates without rotating</b>: bone <code>ROD_CPL_L</code> = child of FRAME, <b>Copy Location</b> from <code>CRANK_D1_L</code>. It stays parallel to the frame automatically.</p>
+<h3>Main (connecting) rod: slider-crank</h3>
+<figure>
+<svg viewBox="0 0 700 220">
+  <line x1="40" y1="120" x2="660" y2="120" stroke="#d5dbe2"/>
+  <circle cx="520" cy="120" r="60" fill="none" stroke="#1d232b" stroke-width="3"/>
+  <circle cx="520" cy="120" r="4" fill="#1d232b"/>
+  <line x1="520" y1="120" x2="556" y2="72" stroke="#c07a12" stroke-width="4"/>
+  <circle cx="556" cy="72" r="6" fill="#c07a12"/>
+  <rect x="160" y="100" width="150" height="40" rx="4" fill="none" stroke="#6a4aa5" stroke-width="2"/>
+  <text x="170" y="94" class="ts">cylinder / guide bars</text>
+  <rect x="236" y="108" width="26" height="24" fill="#6a4aa5"/>
+  <line x1="249" y1="120" x2="556" y2="72" stroke="#1d232b" stroke-width="5"/>
+  <line x1="160" y1="120" x2="249" y2="120" stroke="#6a4aa5" stroke-width="3"/>
+  <g class="ts"><text x="562" y="66">crank pin (r = 0.30)</text><text x="222" y="152">crosshead</text><text x="360" y="84">main rod L = 2.40</text><text x="498" y="140">θ = driver angle</text></g>
+  <text x="40" y="196" class="t">crosshead x = r·cos θ + √(L² − (r·sin θ)²)       → 2.70 m (θ=0) … 2.10 m (θ=180°)</text>
+</svg>
+<figcaption><b>Figure 10.3</b> Put this formula in a driver on the crosshead bone's local Y. It is exact, with no IK solver to wobble. The main rod bone sits at the crosshead and <b>Damped Tracks</b> the crank pin; the piston rod is a child of the crosshead.</figcaption>
+</figure>
+<h3>Walschaerts valve gear (optional depth)</h3>
+<table>
+  <thead><tr><th style="width:28%">Part</th><th>Rigging approach</th></tr></thead>
+  <tbody>
+    <tr><td>Return crank / eccentric rod</td><td>Return crank on the crank pin (fixed offset angle ~90°). Eccentric rod: Damped Track from the return-crank end to the expansion link's lower end.</td></tr>
+    <tr><td>Expansion link</td><td>Rocks about a fixed trunnion on the frame. Its angle comes from the eccentric rod end (Damped Track, or a Transform constraint).</td></tr>
+    <tr><td>Radius rod + die block</td><td>The die position in the link is the <b>reverser</b>: a custom property <code>reverser</code> (−1 … +1) that the animator keys for forward/back gear and cut-off. The radius rod runs from the die to the combination lever.</td></tr>
+    <tr><td>Combination lever / union link</td><td>Hangs from the radius rod; its bottom follows the crosshead via the union link. Two-bone IK with a pole works well here.</td></tr>
+  </tbody>
+</table>
+<div class="callout c-idea"><div class="tag">Make reversing visible</div>
+<p>Tie <code>reverser</code>'s default to the sign of speed with a driver: <code>sign(Δd)</code>, smoothed. The valve gear then flips into back gear when the train reverses, and the animator can override it. Few rigs bother with this, and viewers notice.</p></div>
+
+<h2>10.8 The tender</h2>
+<ul>
+  <li>An ordinary <b>bogie car</b>: two TRACKED pivots at ±2.40 m; the body on the chord (Part 6 §6.4).</li>
+  <li>Each bogie bone takes <b>Copy Transforms</b> from its pivot Empty. Its two wheelsets are children at ±0.80 m, rotation Auto, Ø 0.97 m.</li>
+  <li><b>Drawbar</b>: a bone on the loco's rear coupler with <b>Damped Track</b> to a target bone on the tender's front coupler. Its length change on curves is tiny, and a <b>Stretch To</b> set to volume “none” hides it if needed.</li>
+  <li>Fall-plate and coal/water details are children of the tender BODY. Add some sway (FX) that is slightly out of phase with the loco for realism.</li>
+</ul>
+
+<h2>10.9 Complete bone hierarchy</h2>
+<figure>
+<svg viewBox="0 0 700 430">
+  <g class="t" font-size="10.5">
+  <text x="10" y="18" class="tb">LOCO_242 rig</text>
+  <text x="10" y="40">ROOT  ← vehicle root</text>
+  <text x="30" y="58">FRAME  ← chord(D1, D2), Damped Track D1</text>
+  <text x="50" y="76">BODY ─ FX_BODY (sway, bounce)</text>
+  <text x="70" y="94">boiler · smokebox · cab · dome (meshes)</text>
+  <text x="50" y="112">PIN_F (+2.60)  PIN_R (−2.60)</text>
+  <text x="50" y="130">AXLE_D1 ─ WHL_D1_L, WHL_D1_R ─ CRANK_D1_L/R</text>
+  <text x="50" y="148">AXLE_D2 ─ WHL_D2_L, WHL_D2_R ─ CRANK_D2_L/R</text>
+  <text x="50" y="166">ROD_CPL_L / R   (Copy Loc ← CRANK_D1)</text>
+  <text x="50" y="184">CYL_L / R ─ XHEAD_L/R (driver) ─ PISTON_L/R</text>
+  <text x="70" y="202">ROD_MAIN_L/R  (at XHEAD, Damped Track → CRANK_D2*)</text>
+  <text x="50" y="220">VALVE_L/R: RETCRANK · ECC_ROD · LINK · RADIUS · COMB</text>
+  <text x="50" y="238">CPL_F · CPL_R · DRAWBAR (Damped Track → tender)</text>
+  <text x="30" y="258">TRUCK_F  ← LEAD_TRUCK Empty, Damped Track PIN_F</text>
+  <text x="50" y="276">WHL_F_L, WHL_F_R</text>
+  <text x="30" y="294">TRUCK_R  ← TRAIL_TRUCK Empty, Damped Track PIN_R</text>
+  <text x="50" y="312">WHL_T_L, WHL_T_R</text>
+  <text x="10" y="336">Custom props: ti_distance · ti_r_drivers 0.865 · ti_r_trucks 0.485 · reverser · fx_amount</text>
+  <text x="10" y="354">                drivers_angle · grip · slip_angle  (Part 7 §7.4)</text>
+  <text x="10" y="380" class="ts">* the main rod drives whichever axle the prototype uses (often the rear driver on a 2-4-2). Check the model.</text>
+  <text x="10" y="398" class="ts">Colour key: FRAME and trucks are driven by the mechanism; everything else is ordinary rig the artist can key.</text>
+  </g>
+  <rect x="470" y="30" width="220" height="160" rx="8" fill="#eee8f8" stroke="#d2c6ea"/>
+  <text x="482" y="52" class="tb">TENDER rig</text>
+  <g class="t" font-size="10.5">
+  <text x="482" y="72">ROOT ← tender root</text>
+  <text x="496" y="90">T_BODY ← chord(BOGIE_F, R)</text>
+  <text x="510" y="108">FX_T_BODY · coal · tank</text>
+  <text x="496" y="126">T_BOGIE_F ← BOGIE_F Empty</text>
+  <text x="510" y="144">WHL_TF1/TF2 (L, R)</text>
+  <text x="496" y="162">T_BOGIE_R ← BOGIE_R Empty</text>
+  <text x="510" y="180">WHL_TR1/TR2 (L, R)</text>
+  </g>
+</svg>
+<figcaption><b>Figure 10.4</b> Suggested bone names. The Make Vehicle “Steam loco” template (Part 9) would generate everything above except the valve gear, which is a separate “Add Walschaerts gear” helper.</figcaption>
+</figure>
+
+<h2>10.10 Walkthrough: unrigged → in the framework</h2>
+<ol class="steps">
+  <li><h4>Prepare both models</h4><p>Metres, +Y forward (loco chimney toward +Y), apply transforms, rail top at Z = 0. Keep the loco and tender as separate collections.</p></li>
+  <li><h4>Split the loco into parts</h4><p>Frame, boiler, cab, each wheel (8), crank pins, coupling rods (2), main rods (2), crossheads (2), piston rods (2), valve gear parts, and truck frames (2). Set each origin at its rotation centre (wheels at the axle, rods at their pin ends, crosshead at its slide centre).</p></li>
+  <li><h4>Measure</h4><p>Run <b>Measure Vehicle</b>, or read origins by hand: axle Ys (+3.95, +1.05, −1.05, −3.95), wheel diameters (1.73 / 0.97), and the pin positions of the truck arms.</p></li>
+  <li><h4>Make Vehicle → “Steam loco”</h4><p>Enter the Whyte notation <code>2-4-2</code>. The template creates the root at the centre of the driving wheelbase, two AXLE_POINT pivots at the drivers, two RADIAL pivots at the truck axles with pin offsets, and the rig from 10.9 (without valve gear). Check the gizmos in the viewport.</p></li>
+  <li><h4>Rods</h4><p>Add the crosshead drivers (Fig. 10.3), the coupling rod Copy Locations and the quartering on the crank bones. Then optionally <b>Add Walschaerts gear</b> and wire <code>reverser</code>.</p></li>
+  <li><h4>Bind meshes and rig</h4><p>Name-based auto parenting, then <b>Bind Rig</b>. Hide the pivot Empties.</p></li>
+  <li><h4>Tender</h4><p>Make Vehicle → “Bogie car” with bogies at ±2.40 m, wheelsets at ±0.80 m within each bogie, Ø 0.97 m. Bind.</p></li>
+  <li><h4>Couple and publish</h4><p>Create a consist <code>[Loco, Tender gap 0.30]</code>. Publish the loco and tender as vehicle assets, and the pair as a <b>consist preset</b> asset (<code>Track It / Consists / 242T + Tender</code>).</p></li>
+  <li><h4>Test drive</h4><p>Run it on the test track: minimum radius (check the truck-to-cylinder clearance), the banked curve (average of cant across the drivers), the turnout (the trucks swing through independently), a reverse run (valve gear flips, rods run backwards), and tender-first running (flip the loco's facing and move the tender to the front of the consist).</p></li>
+  <li><h4>Animate a shot</h4><p>Key the turnout at the station throat, then the consist's distance: depart, accelerate, cruise and brake with the Speed Profile tool. Add a wheel-slip burst on starting (slip_angle keys on DRIVERS_ANGLE with grip at 1), and tune FX amounts.</p></li>
+</ol>
+
+<h2>10.11 Pitfalls and checks</h2>
+<table>
+  <thead><tr><th style="width:34%">Symptom</th><th>Cause and fix</th></tr></thead>
+  <tbody>
+    <tr><td>Pony truck wheels drift off the rail on curves</td><td>The truck was given Copy Transforms from the Empty <i>and</i> is parented to FRAME. Remove the parent: trucks are driven by constraints only.</td></tr>
+    <tr><td>The body cuts the inside of curves</td><td>The body is following the root instead of the driver chord. Use FRAME from 10.4.</td></tr>
+    <tr><td>Rods jitter or flip at the dead centres</td><td>IK used for the main rod. Use the exact slider-crank driver.</td></tr>
+    <tr><td>Wheels skid visually</td><td>Wrong diameter group, or the model wasn't in metres. Re-measure; check with the tyre-marker test.</td></tr>
+    <tr><td>The tender lags or leads by a few cm after a switch</td><td>Legacy odometer drift (today's consist prototype). Fixed by the occupied-path evaluator (Part 5).</td></tr>
+    <tr><td>Rods turn backwards when reversing</td><td>They shouldn't: they follow <code>d</code>, which decreases. If they do, a driver uses <code>abs()</code>, or facing was applied twice.</td></tr>
+  </tbody>
+</table>
+
+<h2>10.12 What this study adds to the backlog</h2>
+<ul>
+  <li>Pivot roles (RADIAL with <code>pin_offset</code>, AXLE_POINT) in <code>TrackIt_VehiclePivotItem</code>.</li>
+  <li>A FRAME/BODY chord solver generated by Bind Rig.</li>
+  <li>Multiple wheel groups per vehicle, and a shared driver angle.</li>
+  <li>Slider-crank and Walschaerts helper generators, and the <code>reverser</code> convention.</li>
+  <li>Consist presets as assets.</li>
+  <li>Test-track clearance checks for truck swing.</li>
+</ul>
+</body></html>

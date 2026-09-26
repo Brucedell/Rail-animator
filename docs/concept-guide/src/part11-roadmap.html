@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Part 11 · Roadmap</title>
+<link rel="stylesheet" href="style.css"></head>
+<body data-footer="Part 11 · Roadmap">
+
+<div class="opener">
+  <div class="part-kicker">Part 11</div>
+  <h1 class="part-title">Roadmap to completion</h1>
+  <p class="part-lede">Every Part of this guide turned into ordered phases, each shippable and each keeping the add-on usable. It also covers the test plan that stops regressions, the decisions still open, and the first five things to do next session.</p>
+</div>
+
+<h2>11.1 Phases at a glance</h2>
+<figure>
+<svg viewBox="0 0 700 330">
+  <defs><marker id="r1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" fill="#5b6673"/></marker></defs>
+  <g class="t">
+  <rect x="10" y="10" width="160" height="60" rx="6" fill="#f9e5e3" stroke="#eab9b4"/><text x="20" y="30" font-weight="bold">P0 Stabilise</text><text x="20" y="46" class="ts">fix audit High issues,</text><text x="20" y="60" class="ts">tests, v9 handoff</text>
+  <rect x="190" y="10" width="160" height="60" rx="6" fill="#e3ecf8" stroke="#b9cde8"/><text x="200" y="30" font-weight="bold">P1 Track foundation</text><text x="200" y="46" class="ts">arc tables, KD-tree,</text><text x="200" y="60" class="ts">Network, Track Doctor</text>
+  <rect x="370" y="10" width="160" height="60" rx="6" fill="#e4f3ea" stroke="#b7dcc5"/><text x="380" y="30" font-weight="bold">P2 Motion channel</text><text x="380" y="46" class="ts">distance, Drag Pad,</text><text x="380" y="60" class="ts">timing tools, Bake</text>
+  <rect x="550" y="10" width="140" height="60" rx="6" fill="#fbf1df" stroke="#ecd3a6"/><text x="560" y="30" font-weight="bold">P3 Switching</text><text x="560" y="46" class="ts">turnouts + occupied</text><text x="560" y="60" class="ts">path, converter</text>
+  <rect x="550" y="110" width="140" height="60" rx="6" fill="#eee8f8" stroke="#d2c6ea"/><text x="560" y="130" font-weight="bold">P4 Vehicles + rigs</text><text x="560" y="146" class="ts">roles, Bind Rig,</text><text x="560" y="160" class="ts">wheels, wizard</text>
+  <rect x="370" y="110" width="160" height="60" rx="6" fill="#fbf1df" stroke="#ecd3a6"/><text x="380" y="130" font-weight="bold">P5 Consists</text><text x="380" y="146" class="ts">library members,</text><text x="380" y="160" class="ts">couple/uncouple, UI</text>
+  <rect x="190" y="110" width="160" height="60" rx="6" fill="#e4f3ea" stroke="#b7dcc5"/><text x="200" y="130" font-weight="bold">P6 Assets + content</text><text x="200" y="146" class="ts">library, presets,</text><text x="200" y="160" class="ts">test track, 2-4-2</text>
+  <rect x="10" y="110" width="160" height="60" rx="6" fill="#eee8f8" stroke="#d2c6ea"/><text x="20" y="130" font-weight="bold">P7 Polish</text><text x="20" y="146" class="ts">secondary motion,</text><text x="20" y="160" class="ts">valve gear, overlays</text>
+  </g>
+  <g stroke="#5b6673"><line x1="170" y1="40" x2="188" y2="40" marker-end="url(#r1)"/><line x1="350" y1="40" x2="368" y2="40" marker-end="url(#r1)"/><line x1="530" y1="40" x2="548" y2="40" marker-end="url(#r1)"/><line x1="620" y1="70" x2="620" y2="108" marker-end="url(#r1)"/><line x1="550" y1="140" x2="532" y2="140" marker-end="url(#r1)"/><line x1="370" y1="140" x2="352" y2="140" marker-end="url(#r1)"/><line x1="190" y1="140" x2="172" y2="140" marker-end="url(#r1)"/></g>
+  <rect x="10" y="200" width="680" height="120" rx="8" fill="#fff" stroke="#d5dbe2"/>
+  <text x="22" y="222" class="tb">What you can do after each phase</text>
+  <g class="ts">
+    <text x="22" y="242">P0: render any scene reliably; edit curves without stale offsets; two trains in one scene.</text>
+    <text x="22" y="258">P1: build big layouts that stay fast; switches detected once; yard sidings never confused.</text>
+    <text x="22" y="274">P2: animate a whole run with one F-curve in metres; drag with the mouse safely; farm-ready bakes.</text>
+    <text x="22" y="290">P3: set points, shunt, switchback, back into sidings from the last car, with two trains sharing turnouts.</text>
+    <text x="22" y="306">P4–P7: any model → vehicle in minutes; real trains from the library; the 2-4-2 with working rods.</text>
+  </g>
+</svg>
+<figcaption><b>Figure 11.1</b> Phase order. P4 (vehicle roles, Bind Rig) can start alongside P2/P3 if you want rigging progress sooner. It only depends on P0.</figcaption>
+</figure>
+
+<h2>11.2 Backlog by phase</h2>
+<table>
+  <thead><tr><th style="width:8%">Phase</th><th>Item</th><th style="width:16%">Ref</th><th style="width:10%">Size</th></tr></thead>
+  <tbody>
+    <tr><td>P0</td><td>Evaluate pivots and wagons for <b>all</b> vehicles, not only the active object</td><td>Audit #1, Part 7 §7.7</td><td>M</td></tr>
+    <tr><td>P0</td><td>Arc cache keyed by object and geometry hash; invalidate on edit</td><td>Audit #2, Part 4 §4.2</td><td>S</td></tr>
+    <tr><td>P0</td><td>Clear inherited collections on wagon clones (verify first)</td><td>Audit #4</td><td>S</td></tr>
+    <tr><td>P0</td><td>Pivots resolve via the existing route resolver (crossing fix)</td><td>Audit #3, Part 6 §6.5</td><td>S</td></tr>
+    <tr><td>P0</td><td>bl_info version bump, minimum Blender version, “Migrate constraints” operator</td><td>Part 1 §1.4, audit #12</td><td>S</td></tr>
+    <tr><td>P0</td><td>Recover the Drag Pad prototype from the fork; write the v9 handoff</td><td>Part 1 §1.4</td><td>S</td></tr>
+    <tr><td>P0</td><td>Headless test harness plus five baseline scenes</td><td>§11.3</td><td>M</td></tr>
+    <tr><td>P1</td><td>Arc tables from <code>interpolate_bezier</code>, cyclic support, KD-tree nearest</td><td>Part 4 §4.2</td><td>M</td></tr>
+    <tr><td>P1</td><td>Track Network + Scan Track (joints, turnouts with span test, dead ends)</td><td>Part 4 §4.3</td><td>L</td></tr>
+    <tr><td>P1</td><td>Track Doctor; joint auto-continue toggle; Auto Cant</td><td>Part 4 §4.5–4.8</td><td>M</td></tr>
+    <tr><td>P1</td><td>Split into package / Extension; UUIDs on managed objects</td><td>Part 3 §3.5, audit #8</td><td>M</td></tr>
+    <tr><td>P2</td><td>Consist distance as the Motion channel (a lone vehicle = consist of one)</td><td>Part 7 §7.1</td><td>L</td></tr>
+    <tr><td>P2</td><td>Drag Slider on distance; Drag Pad modal; step buttons; speed readout</td><td>Part 7 §7.3, 7.6</td><td>M</td></tr>
+    <tr><td>P2</td><td>Speed Profile, Arrive At; Bake / Clear Bake</td><td>Part 7 §7.2, 7.8</td><td>M</td></tr>
+    <tr><td>P3</td><td>Junction objects with keyframeable state; Junctions Ahead panel</td><td>Part 5 §5.5, 5.7</td><td>M</td></tr>
+    <tr><td>P3</td><td>Occupied-path evaluator with per-frame cache</td><td>Part 5 §5.5</td><td>L</td></tr>
+    <tr><td>P3</td><td>Convert Keyed Switches; retire keyframe mining, shadow sync, odometer log</td><td>Part 5 §5.8</td><td>M</td></tr>
+    <tr><td>P4</td><td>Pivot roles; chord FRAME/BODY solver; Bind/Unbind Rig</td><td>Part 6</td><td>L</td></tr>
+    <tr><td>P4</td><td>Wheel groups, Auto/Direct/Slip/Grip drivers; facing</td><td>Part 7 §7.4, Part 6 §6.7</td><td>M</td></tr>
+    <tr><td>P4</td><td>VehicleDef, Measure Vehicle, Make Vehicle wizard with templates</td><td>Part 9</td><td>L</td></tr>
+    <tr><td>P5</td><td>Library-based members, coupler spacing, couple/uncouple events, Train Builder UI</td><td>Part 8</td><td>L</td></tr>
+    <tr><td>P6</td><td>Asset library layout, test track scene, track presets, mine cart, coach, 2-4-2 + tender</td><td>Parts 4, 9, 10</td><td>L</td></tr>
+    <tr><td>P7</td><td>Secondary motion FX, Walschaerts helper, reverser, overlays, performance pass</td><td>Part 7 §7.5, Part 10</td><td>M</td></tr>
+  </tbody>
+</table>
+<p class="small">Size: S ≈ one session, M ≈ 2–3 sessions, L ≈ 4+ sessions, at the pace of the sessions so far.</p>
+
+<h2>11.3 Test plan</h2>
+<p>Most of the bugs found so far (the flag-ordering race, contaminated keys, stale matrix reads, the keyframe-removal iterator) were caught by hand, after the fact. A small automated suite running Blender headless catches them before you open Blender:</p>
+<pre>blender -b tests/scenes/switch_basic.blend -P tests/run.py -- --case all</pre>
+<table>
+  <thead><tr><th style="width:26%">Scene</th><th>Assertions</th></tr></thead>
+  <tbody>
+    <tr><td>attach_roundtrip</td><td>Attach → Detach → Attach leaves the world matrix unchanged (±1e-5), with no rotation stacking.</td></tr>
+    <tr><td>arc_accuracy</td><td>For 20 factors, the add-on's predicted position = Blender's evaluated Follow Path position (±1 mm), including a cyclic curve and resolution 4.</td></tr>
+    <tr><td>switch_basic</td><td>Diverge at frame 36: positions at frames 1/35/36/37/120 match stored golden values when scrubbed forward, backward and randomly.</td></tr>
+    <tr><td>switchback</td><td>Main → curve 2 → reverse onto curve 3. Every pivot and wagon is on the expected curve at each checkpoint.</td></tr>
+    <tr><td>yard_sidings</td><td>Dead-end sidings ending close together never produce a switch (the §8.5 regression).</td></tr>
+    <tr><td>consist_spacing</td><td>Four wagons through two switches: the gap between consecutive members along the route stays within ±5 mm.</td></tr>
+    <tr><td>render_parity</td><td>With nothing selected, a background render pose at frames 50 and 120 equals the viewport pose.</td></tr>
+    <tr><td>edit_invalidation</td><td>Move a curve point after attaching: the next evaluation uses the new geometry.</td></tr>
+  </tbody>
+</table>
+
+<h2>11.4 Decisions still open</h2>
+<table>
+  <thead><tr><th style="width:36%">Question</th><th style="width:34%">Recommendation</th><th>Where</th></tr></thead>
+  <tbody>
+    <tr><td>Adopt turnout state + occupied path instead of per-vehicle history?</td><td>Yes, in Phase 3, via the converter</td><td>Part 5</td></tr>
+    <tr><td>Per-train Route Plan overrides?</td><td>Optional, off by default</td><td>Part 5 §5.6</td></tr>
+    <tr><td>Live drag reads the current or the next keyed turnout state?</td><td>A setting; default “current”</td><td>Part 5 §5.6</td></tr>
+    <tr><td>Animate distance instead of offset_factor?</td><td>Yes</td><td>Part 7 §7.1</td></tr>
+    <tr><td>Vehicle root at the centre or the front coupler?</td><td>Centre, plus coupler distances</td><td>Part 6 §6.3</td></tr>
+    <tr><td>Turnout toe: auto-detected or a marker Empty?</td><td>Auto, with an optional override</td><td>Part 4 §4.4</td></tr>
+    <tr><td>Loco and tender: one vehicle or two?</td><td>Two, coupled, plus a consist preset</td><td>Part 10 §10.2</td></tr>
+    <tr><td>Couple/uncouple as timeline events or destructive edits?</td><td>Timeline events</td><td>Part 8 §8.4</td></tr>
+    <tr><td>Keep Mouse Drag at all once the Drag Pad works?</td><td>Remove it</td><td>Part 7 §7.3</td></tr>
+    <tr><td>Joint auto-continue: scene-wide or per vehicle?</td><td>Per junction now, per vehicle later</td><td>Part 4 §4.5</td></tr>
+  </tbody>
+</table>
+
+<h2>11.5 Risks</h2>
+<table>
+  <thead><tr><th style="width:30%">Risk</th><th>Mitigation</th></tr></thead>
+  <tbody>
+    <tr><td>The modal-transform crash comes back</td><td>No handler writes during <code>TRANSFORM_OT_*</code> modals (check <code>window.modal_operators</code>); live control only through add-on-owned widgets; a test that runs a scripted grab.</td></tr>
+    <tr><td>Performance on large layouts</td><td>Network built once; KD-trees; per-frame route cache; profile with 50 curves and 5 trains as an acceptance target.</td></tr>
+    <tr><td>Blender API changes (layered Actions changed in 4.4/5.x)</td><td>Isolate F-curve access in one helper (<code>_track_it_find_fcurve</code> already does this); pin the minimum version in the manifest.</td></tr>
+    <tr><td>A big rewrite stalls progress</td><td>Every phase ships. The old paths stay behind toggles until the converter and tests prove the new ones.</td></tr>
+    <tr><td>Scenes from before the migration</td><td>Migrate/Convert operators, plus Bake as an escape hatch.</td></tr>
+  </tbody>
+</table>
+
+<h2>11.6 Next five actions</h2>
+<ol class="steps">
+  <li><h4>Write the v9 handoff and bump the version</h4><p>Record the consist prototype (not in v8), the missing Drag Pad, and this guide's audit list.</p></li>
+  <li><h4>Fix “active object only”</h4><p>Loop over every object with a Track It root in both handlers. This is the smallest change with the biggest effect (renders).</p></li>
+  <li><h4>Fix the arc cache</h4><p>Key it by <code>curve.as_pointer()</code> plus a geometry hash, and clear it in <code>depsgraph_update_post</code> for updated curve ids.</p></li>
+  <li><h4>Route pivots through <code>_track_it_resolve_route_position</code></h4><p>This closes v8 §3.3 with code that already exists.</p></li>
+  <li><h4>Build the headless test harness</h4><p>Start with attach_roundtrip, arc_accuracy and render_parity, then refactor with confidence.</p></li>
+</ol>
+
+<div class="callout c-idea"><div class="tag">Closing note</div>
+<p>The hard, fiddly parts are already solved: arc-length attach, crash-safe live driving, influence switching, junction-exact consist spacing. What's left is mostly <b>moving decisions to where they belong</b> (switches on the track, motion on the train, looks on the rig) and building the tools around them. The design sessions already pointed that way.</p></div>
+</body></html>

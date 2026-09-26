@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Part 5 · Switching and route history</title>
+<link rel="stylesheet" href="style.css"></head>
+<body data-footer="Part 5 · Switching and route history">
+
+<div class="opener">
+  <div class="part-kicker">Part 5</div>
+  <h1 class="part-title">Switching and route history</h1>
+  <p class="part-lede">How the add-on remembers which way a train went. First the current keyframe-and-marker system and its limits, then a simpler model borrowed from real railways: <b>set the points, and the train follows its own occupied path</b>.</p>
+</div>
+<div class="toc-part">
+  <div>5.1 How switching works today</div><div>5.2 Live switching triggers</div>
+  <div>5.3 Remove Switch and auto-switch</div><div>5.4 Where the current model strains</div>
+  <div>5.5 Proposal: turnout state + occupied path</div><div>5.6 Scenarios walked through</div>
+  <div>5.7 Mapping today's UI onto it</div><div>5.8 Migration path</div>
+</div>
+
+<h2>5.1 How switching works today</h2>
+<div class="callout c-now"><div class="tag">Current state</div>
+<p>Every switch keys <b>offset_factor and influence on every held constraint</b> at that frame. The newly active curve's influence key is set to 1 with CONSTANT interpolation, and all others to 0. A timeline marker <code>Switch: {object} -&gt; {curve}</code> is added. Manual switches are <b>EXTREME</b> keys, reconstructed ones <b>BREAKDOWN</b>, and plain position keys are normal <b>KEYFRAME</b>s.</p></div>
+<figure>
+<svg viewBox="0 0 700 280">
+  <!-- timeline axis -->
+  <line x1="60" y1="250" x2="680" y2="250" stroke="#5b6673"/>
+  <g class="ts"><text x="55" y="268">1</text><text x="240" y="268">36</text><text x="420" y="268">60</text><text x="660" y="268">120</text></g>
+  <!-- marker -->
+  <path d="M245 20 l-6 -10 h12 z" fill="#1d232b"/><line x1="245" y1="20" x2="245" y2="250" stroke="#1d232b" stroke-dasharray="3 3"/>
+  <text x="252" y="18" class="ts">Switch: Loco -&gt; Siding</text>
+  <!-- influence tracks -->
+  <text x="10" y="54" class="t">Main</text><text x="10" y="68" class="ts">influence</text>
+  <polyline points="60,45 245,45 245,75 680,75" fill="none" stroke="#2a5d9f" stroke-width="2.5"/>
+  <text x="10" y="114" class="t">Siding</text><text x="10" y="128" class="ts">influence</text>
+  <polyline points="60,135 245,135 245,105 680,105" fill="none" stroke="#2f7d4f" stroke-width="2.5"/>
+  <!-- offsets -->
+  <text x="10" y="170" class="t">offsets</text>
+  <path d="M60 230 C 150 220, 200 190, 245 175 S 400 150, 680 145" fill="none" stroke="#2a5d9f" stroke-width="2"/>
+  <path d="M60 240 C 150 238, 200 232, 245 225 S 400 185, 680 160" fill="none" stroke="#2f7d4f" stroke-width="2"/>
+  <!-- keys -->
+  <g>
+    <rect x="56" y="41" width="8" height="8" fill="#1d232b" transform="rotate(45 60 45)"/>
+    <rect x="241" y="41" width="9" height="9" fill="#b3372f" transform="rotate(45 245 45)"/>
+    <rect x="241" y="131" width="9" height="9" fill="#b3372f" transform="rotate(45 245 135)"/>
+    <rect x="56" y="131" width="8" height="8" fill="#1d232b" transform="rotate(45 60 135)"/>
+    <rect x="676" y="71" width="8" height="8" fill="#1d232b" transform="rotate(45 680 75)"/>
+    <rect x="676" y="101" width="8" height="8" fill="#1d232b" transform="rotate(45 680 105)"/>
+  </g>
+  <text x="440" y="60" class="ts">black = KEYFRAME · red = EXTREME</text>
+  <text x="440" y="200" class="ts">both curves' offsets keyed at every key frame,</text>
+  <text x="440" y="214" class="ts">so the inactive one is ready if switched to later</text>
+</svg>
+<figcaption><b>Figure 5.1</b> A single switch at frame 36, as the add-on records it now.</figcaption>
+</figure>
+
+<h2>5.2 Live switching triggers</h2>
+<p>While dragging (with the Live Switching box ticked), the vehicle changes curve without writing keys, but <b>only</b> in two situations. That rule was written after two dead ends (switching at curve ends only, and switching to whatever was nearest):</p>
+<figure>
+<svg viewBox="0 0 700 170">
+  <defs><marker id="s1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" fill="#5b6673"/></marker></defs>
+  <rect x="10" y="50" width="130" height="60" rx="6" fill="#f4f6f9" stroke="#d5dbe2"/><text x="22" y="76" class="t">Slider moved</text><text x="22" y="92" class="ts">offset old → new</text>
+  <rect x="180" y="10" width="240" height="64" rx="6" fill="#e4f3ea" stroke="#b7dcc5"/>
+  <text x="192" y="30" class="t" font-weight="bold">① Recorded fork crossed?</text>
+  <text x="192" y="46" class="ts">another held curve shares a keyed frame where</text>
+  <text x="192" y="60" class="ts">one became active; offset crossed that value</text>
+  <rect x="180" y="90" width="240" height="64" rx="6" fill="#e4f3ea" stroke="#b7dcc5"/>
+  <text x="192" y="110" class="t" font-weight="bold">② Unique continuation?</text>
+  <text x="192" y="126" class="ts">offset within 0.001 of 0 or 1 AND exactly one</text>
+  <text x="192" y="140" class="ts">other held curve within Enter Range</text>
+  <rect x="460" y="50" width="230" height="60" rx="6" fill="#fbf1df" stroke="#ecd3a6"/>
+  <text x="472" y="72" class="t">switch influence 0 ↔ 1</text><text x="472" y="88" class="ts">stash real crossing values (JSON)</text><text x="472" y="102" class="ts">no keyframes written</text>
+  <line x1="140" y1="70" x2="178" y2="45" stroke="#5b6673" marker-end="url(#s1)"/>
+  <line x1="140" y1="90" x2="178" y2="120" stroke="#5b6673" marker-end="url(#s1)"/>
+  <line x1="420" y1="42" x2="458" y2="70" stroke="#5b6673" marker-end="url(#s1)"/>
+  <line x1="420" y1="122" x2="458" y2="92" stroke="#5b6673" marker-end="url(#s1)"/>
+</svg>
+<figcaption><b>Figure 5.2</b> <code>_track_it_try_live_switch_continue</code>. A dead-zone (1e-4) stops an endless ping-pong at the threshold.</figcaption>
+</figure>
+
+<h2>5.3 Remove Switch and auto-switch</h2>
+<div class="grid2">
+<div class="card"><h4>Remove Switch (cascade)</h4>
+<p class="small" style="color:#1d232b">On a switch frame, the Keyframe button becomes <b>Remove Switch</b>. It deletes this vehicle's switch markers and <b>every</b> offset/influence key at and after that frame, hand-placed ones included, after a dialog showing the real counts. Reason: everything later was built on a decision that no longer exists.</p></div>
+<div class="card"><h4>Auto-switch reconstruction</h4>
+<p class="small" style="color:#1d232b">If you key the vehicle on a different curve than the last real key recorded (because you live-dragged across a fork), a <b>BREAKDOWN</b> switch key is inserted at the midpoint frame. It uses the <b>stashed real crossing offsets</b>, not the current resting position, so playback runs smoothly with no pop.</p></div>
+</div>
+
+<h2>5.4 Where the current model strains</h2>
+<table>
+  <thead><tr><th style="width:34%">Situation</th><th>What happens now</th></tr></thead>
+  <tbody>
+    <tr><td>Leftover test keys on a constraint</td><td>Keyframe mining reads them as real forks. This has happened twice (v8 §8.3).</td></tr>
+    <tr><td>Pivots or a trailing car reach a fork before the root</td><td>Pivots clamp to the root's curve. Wagons use a separate odometer log with dedupe, “authoritative” overwrite and stale-entry pruning.</td></tr>
+    <tr><td>Deleting an early switch</td><td>Must also delete every later key, because later offsets depend on it.</td></tr>
+    <tr><td>Two curves meeting at two junctions (loops, reversing)</td><td>The 1-D odometer maps two places to one distance. Pruning drops the older claim, which works but needs care.</td></tr>
+    <tr><td>Switchback (main → curve 2, reverse onto curve 3)</td><td>Handled by playhead position. It only works if keys are placed in the right order.</td></tr>
+    <tr><td>Two trains through the same turnout</td><td>Each vehicle mines its own keys, so nothing ties them to one real turnout.</td></tr>
+    <tr><td>A detour inside a single frame</td><td>Can't be reconstructed at all (v8 §8.4).</td></tr>
+  </tbody>
+</table>
+<p>None of these are coding mistakes. They all come from one choice: <b>storing the route as per-curve offsets on each vehicle</b>. Change what is stored, and they go away.</p>
+
+<h2>5.5 Proposal: turnout state + occupied path</h2>
+<p>On a real railway, trains don't choose. <b>The points are set, and the train goes where the rails lead.</b> The model below copies that:</p>
+<figure>
+<svg viewBox="0 0 700 420">
+  <g transform="translate(0,90)">
+  <!-- track -->
+  <path d="M20 250 L 680 250" stroke="#2a5d9f" stroke-width="3" fill="none"/>
+  <path d="M300 251 C 380 251, 450 240, 530 190 S 640 120, 690 110" stroke="#2a5d9f" stroke-width="3" fill="none"/>
+  <rect x="293" y="243" width="14" height="14" fill="#c07a12"/><text x="280" y="280" class="t">T1</text>
+  <!-- occupied path highlight -->
+  <path d="M110 250 L 300 250 C 380 250, 450 240, 520 196" stroke="#2f7d4f" stroke-width="10" fill="none" opacity=".35"/>
+  <!-- train -->
+  <g fill="#1d232b"><rect x="120" y="238" width="60" height="16" rx="3"/><rect x="186" y="240" width="45" height="13" rx="3" fill="#5b6673"/><rect x="238" y="240" width="45" height="13" rx="3" fill="#5b6673"/></g>
+  <text x="110" y="232" class="ts">tail</text>
+  <circle cx="520" cy="196" r="6" fill="#2f7d4f"/><text x="530" y="214" class="ts">head of occupied path</text>
+  <text x="115" y="300" class="t" fill="#2f7d4f">occupied path: an ordered list of (segment, from, to, direction)</text>
+  <text x="115" y="318" class="ts">Every car, bogie and pivot = “the point on this path at distance d − its offset”.</text>
+    </g>
+  <!-- state panel -->
+  <rect x="10" y="10" width="330" height="170" rx="8" fill="#f4f6f9" stroke="#d5dbe2"/>
+  <text x="22" y="32" class="tb">Turnout T1 state (a keyframeable property)</text>
+  <line x1="30" y1="140" x2="320" y2="140" stroke="#5b6673"/>
+  <g class="ts"><text x="26" y="156">frame 1</text><text x="150" y="156">36</text><text x="290" y="156">120</text></g>
+  <polyline points="30,110 155,110 155,70 320,70" fill="none" stroke="#c07a12" stroke-width="2.5"/>
+  <text x="36" y="104" class="ts">THROUGH</text><text x="200" y="64" class="ts">DIVERGE</text>
+  <rect x="151" y="66" width="9" height="9" fill="#b3372f" transform="rotate(45 155 70)"/>
+  <text x="22" y="172" class="ts">Constant interpolation. One curve per turnout, shared by every train.</text>
+  <!-- rule panel -->
+  <rect x="360" y="10" width="330" height="170" rx="8" fill="#e4f3ea" stroke="#b7dcc5"/>
+  <text x="372" y="32" class="tb">The only rule</text>
+  <text x="372" y="54" class="t">When the train moves, extend its path</text>
+  <text x="372" y="70" class="t">at the <tspan font-weight="bold">leading end</tspan> and trim the other end.</text>
+  <text x="372" y="92" class="t">Extending into a turnout from its toe</text>
+  <text x="372" y="108" class="t">side takes the leg its <tspan font-weight="bold">state</tspan> says.</text>
+  <text x="372" y="130" class="t">From a heel side there's only one way.</text>
+  <text x="372" y="152" class="ts">Leading end = head going forward, tail reversing.</text>
+  <text x="372" y="166" class="ts">That's all “bi-directional switching” needs.</text>
+</svg>
+<figcaption><b>Figure 5.3</b> The train owns a contiguous <b>occupied path</b>. Points ahead of the train are decided only when the leading end reaches them; cars already on a leg stay on it.</figcaption>
+</figure>
+
+<h3>Why this is deterministic when scrubbing</h3>
+<p>The occupied path at frame <i>F</i> comes from <b>replaying</b> the train's distance curve from its start frame to <i>F</i>, extending and trimming as it goes, and reading each turnout's state at the frame the leading end reaches it. That is a small step per frame, <b>cached per frame</b> and invalidated only when the distance keys, the turnout keys or the track change. Scrubbing backwards just reads the cache. Rendering frame 200 on a farm replays 1→200 once (milliseconds for normal scenes).</p>
+
+<div class="callout c-idea"><div class="tag">What disappears</div>
+<ul>
+  <li>No per-curve offset keys on vehicles (offsets become outputs, bakeable).</li>
+  <li>No keyframe mining, no shadow-tracking of held curves, no odometer drift or pruning heuristics.</li>
+  <li>No cascade delete: removing a turnout key only changes where the train goes <i>afterwards</i>. Nothing downstream is invalidated, because distance is independent of route.</li>
+  <li>No pivot/wagon special cases: they are all points on the same path.</li>
+  <li>No overlap-length rule for consists (Part 4 §4.4).</li>
+</ul></div>
+
+<h3>Interlocking: safety for free</h3>
+<p>Changing a turnout while part of the train is already over it does nothing to the cars that are already past the toe, because they are on the occupied path. The UI can warn “T1 is occupied” and show the state change taking effect for the <i>next</i> train, just like real signalling. This is the gating rule from v8 §8.1 (“if any point has passed the divergence, the fork is no longer a choice”), and it happens automatically.</p>
+
+<h2>5.6 Scenarios walked through</h2>
+<table>
+  <thead><tr><th style="width:26%">Scenario</th><th>With turnout state + occupied path</th></tr></thead>
+  <tbody>
+    <tr><td><b>Simple diverge</b> at frame 36</td><td>Key T1 = DIVERGE at or before the frame the head reaches it. Key the train's distance as usual. Pivots and wagons each take the branch when <i>they</i> reach the toe.</td></tr>
+    <tr><td><b>Switchback</b>: main → curve 2, then reverse onto curve 3</td><td>T1 (main/curve 2) = DIVERGE. The train runs onto curve 2 past T2. Key T2 = DIVERGE toward curve 3, then key the distance going <b>down</b>. The tail is now the leading end, it reaches T2 from its toe side, and takes curve 3. No special case.</td></tr>
+    <tr><td><b>Back a train into a siding, decided by the last car</b></td><td>The same thing: when reversing, the last car's end of the path extends through the siding turnout's state. The locomotive follows later on the same path.</td></tr>
+    <tr><td><b>Drag live</b> without keys</td><td>Dragging changes distance and extends the path using turnout states at the <i>current frame</i>. Option: <b>“Drag uses: current state / next keyed state”</b>. The second gives the behaviour asked for in session 5 (“if a switch exists, dragging from before frame 36 still takes it”).</td></tr>
+    <tr><td><b>Two trains, one turnout</b></td><td>Both read the same T1 F-curve. Set it to DIVERGE for train A at frame 40, back to THROUGH at frame 90 for train B. That is a realistic yard timetable.</td></tr>
+    <tr><td><b>Remove a decision</b></td><td>Delete the T1 key. The train now stays on main. Its speed and timing keys still make sense, so nothing else is deleted.</td></tr>
+    <tr><td><b>Joint</b></td><td>Always a single way on, so the path just continues (unless the joint's auto-continue is off: buffer stop).</td></tr>
+  </tbody>
+</table>
+
+<div class="callout c-decide"><div class="tag">Decision needed</div>
+<p><b>Per-train overrides?</b> Some users will want “this train always takes the branch at T1, whatever the turnout says” (for example, crowd scenes). Recommendation: add an optional <b>Route Plan override</b> list per consist, an ordered list of (junction, leg) choices tried before the turnout state. It is off by default so there is one source of truth.</p></div>
+
+<h2>5.7 Mapping today's UI onto it</h2>
+<table>
+  <thead><tr><th style="width:30%">Today</th><th>Becomes</th></tr></thead>
+  <tbody>
+    <tr><td>Switching panel: “Ready to Switch → X”</td><td>“Junctions ahead”: the next N junctions within look-ahead distance of the leading end, each with a THROUGH / DIVERGE toggle and a key button. The HUD “Switch Available” notice fires when the leading end is within range of an unset turnout.</td></tr>
+    <tr><td>Switch button (EXTREME key + marker)</td><td>Keys the turnout state (EXTREME type kept for visibility). The marker becomes <code>T1 → Siding</code> by junction uid, so renames are safe.</td></tr>
+    <tr><td>Keyframe Offset Factor</td><td><b>Key Position</b>: keys consist distance. The label logic stays the same (key or remove).</td></tr>
+    <tr><td>Remove Switch cascade dialog</td><td>Plain “Remove turnout key”. The dialog can list which trains' routes will change.</td></tr>
+    <tr><td>Live Switching checkbox</td><td>Not needed. Live dragging always follows the network.</td></tr>
+    <tr><td>Enter/Exit Range</td><td>Only used by Scan Track (tolerances) and the HUD look-ahead.</td></tr>
+  </tbody>
+</table>
+
+<h2>5.8 Migration path</h2>
+<ol class="steps">
+  <li><h4>Build the Track Network (Part 4)</h4><p>It is useful on its own: it speeds up today's candidate discovery and fixes the yard false positive.</p></li>
+  <li><h4>Add Junction objects + state, alongside the old system</h4><p>The Switch button writes both the old keys and the turnout key, so nothing breaks.</p></li>
+  <li><h4>Implement the occupied-path evaluator behind a toggle</h4><p>Apply it to consists first, where the gains are biggest, then to pivots.</p></li>
+  <li><h4>Convert existing scenes</h4><p>A <b>Convert Keyed Switches</b> operator reads each vehicle's EXTREME/BREAKDOWN keys and markers, creates turnout keys, and converts offset keys to a distance curve (integrating length along the resolved route).</p></li>
+  <li><h4>Retire the old path</h4><p>Remove keyframe mining, shadow tracking, stash JSON and the odometer log once the converter has been checked on the test scenes.</p></li>
+</ol>
+</body></html>

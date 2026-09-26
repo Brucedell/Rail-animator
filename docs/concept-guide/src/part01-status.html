@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Part 1 · Where the project stands</title>
+<link rel="stylesheet" href="style.css"></head>
+<body data-footer="Part 1 · Where the project stands">
+
+<div class="opener">
+  <div class="part-kicker">Part 1</div>
+  <h1 class="part-title">Where the project stands</h1>
+  <p class="part-lede">How the project got from a hand-wired armature rig to a Follow Path framework, what the add-on does today, and what the code audit found.</p>
+</div>
+<div class="toc-part">
+  <div>1.1 From the legacy rig to Track It</div><div>1.2 What the add-on can do today</div>
+  <div>1.3 How the current code is wired</div><div>1.4 Handoff v8 vs the latest source</div>
+  <div>1.5 Code audit: issues found</div><div>1.6 What “finished” means</div>
+</div>
+
+<h2>1.1 From the legacy rig to Track It</h2>
+<p>The original train rigs were built years ago through trial and error, and they worked. But every train was hard-wired to one track by name, and the motion came from a chain of indirect constraints:</p>
+
+<figure>
+<svg viewBox="0 0 700 250">
+  <defs><marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" fill="#5b6673"/></marker></defs>
+  <!-- legacy column -->
+  <rect x="5" y="5" width="330" height="240" rx="8" fill="#f9e5e3" stroke="#eab9b4"/>
+  <text x="18" y="26" class="tb">Legacy rig (per train, per track)</text>
+  <g font-size="10">
+    <rect x="18" y="40" width="96" height="34" rx="4" fill="#fff" stroke="#2a5d9f"/><text x="26" y="55" class="t">Spline</text><text x="26" y="68" class="ts">position</text>
+    <rect x="122" y="40" width="96" height="34" rx="4" fill="#fff" stroke="#2a5d9f"/><text x="130" y="55" class="t">Direction plane</text><text x="130" y="68" class="ts">(Track It mesh)</text>
+    <rect x="226" y="40" width="96" height="34" rx="4" fill="#fff" stroke="#2a5d9f"/><text x="234" y="55" class="t">Bank plane</text><text x="234" y="68" class="ts">(Bank It mesh)</text>
+    <rect x="18" y="104" width="96" height="40" rx="4" fill="#fff" stroke="#6a4aa5"/><text x="26" y="120" class="t">Clamp bone</text><text x="26" y="134" class="ts">CLAMP TO</text>
+    <rect x="122" y="104" width="96" height="40" rx="4" fill="#fff" stroke="#6a4aa5"/><text x="130" y="120" class="t">Snap pair</text><text x="130" y="134" class="ts">SHRINKWRAP ×2</text>
+    <rect x="226" y="104" width="96" height="40" rx="4" fill="#fff" stroke="#6a4aa5"/><text x="234" y="120" class="t">Bank samplers</text><text x="234" y="134" class="ts">TRANSFORM rot→loc</text>
+    <rect x="70" y="172" width="200" height="34" rx="4" fill="#fff" stroke="#6a4aa5"/><text x="80" y="187" class="t">Bo_sail TRACK TO → rootcatcher</text><text x="80" y="200" class="ts">heading solved by “look-ahead” pair</text>
+    <line x1="66" y1="74" x2="66" y2="102" stroke="#5b6673" marker-end="url(#a1)"/>
+    <line x1="170" y1="74" x2="170" y2="102" stroke="#5b6673" marker-end="url(#a1)"/>
+    <line x1="274" y1="74" x2="274" y2="102" stroke="#5b6673" marker-end="url(#a1)"/>
+    <line x1="66" y1="144" x2="120" y2="170" stroke="#5b6673" marker-end="url(#a1)"/>
+    <line x1="170" y1="144" x2="170" y2="170" stroke="#5b6673" marker-end="url(#a1)"/>
+    <line x1="274" y1="144" x2="224" y2="170" stroke="#5b6673" marker-end="url(#a1)"/>
+    <text x="18" y="232" class="ts">Motion: animate “Movtivecontrol” Y → TRANSFORM → Clamp To snaps.</text>
+  </g>
+  <!-- arrow -->
+  <line x1="340" y1="125" x2="362" y2="125" stroke="#1d232b" stroke-width="2" marker-end="url(#a1)"/>
+  <!-- new column -->
+  <rect x="365" y="5" width="330" height="240" rx="8" fill="#e4f3ea" stroke="#b7dcc5"/>
+  <text x="378" y="26" class="tb">Track It (Follow Path, add-on driven)</text>
+  <rect x="378" y="40" width="304" height="34" rx="4" fill="#fff" stroke="#2a5d9f"/><text x="388" y="55" class="t">One curve per track, with tilt baked into the points</text><text x="388" y="68" class="ts">position + heading + banking all come from the curve</text>
+  <rect x="378" y="96" width="304" height="40" rx="4" fill="#fff" stroke="#c07a12"/><text x="388" y="112" class="t">Vehicle root: Follow Path, use_fixed_location</text><text x="388" y="126" class="ts">offset_factor = distance ÷ length (Attach computes it)</text>
+  <rect x="378" y="152" width="304" height="34" rx="4" fill="#fff" stroke="#c07a12"/><text x="388" y="167" class="t">Pivots + consist wagons derived by the add-on</text><text x="388" y="180" class="ts">each is an Empty/object with its own Follow Path</text>
+  <line x1="530" y1="74" x2="530" y2="94" stroke="#5b6673" marker-end="url(#a1)"/>
+  <line x1="530" y1="136" x2="530" y2="150" stroke="#5b6673" marker-end="url(#a1)"/>
+  <text x="378" y="210" class="t">Retarget a train: <tspan font-weight="bold">pick a curve, click Attach</tspan>.</text>
+  <text x="378" y="228" class="ts">Legacy: ≥ 8 manual retargets per train unit.</text>
+</svg>
+<figcaption><b>Figure 1.1</b> Left: the legacy rig reconstructed in session 1 (the “running engine 1” locomotive). Right: the architecture that replaced it.</figcaption>
+</figure>
+
+<h3>Milestones so far</h3>
+<table>
+  <thead><tr><th style="width:18%">When</th><th>What changed</th></tr></thead>
+  <tbody>
+    <tr><td>May 2026</td><td>Legacy rig analysed. Wish list set: attach where the object stands, fewer retargets, track switching.</td></tr>
+    <tr><td>4–5 Sep</td><td>Follow Path found to give position, heading and banking from one curve. Attach operator: closest point → arc-length offset_factor, then zero the local location.</td></tr>
+    <tr><td>7 Sep</td><td>Nearby Curves list (nearest point on curve). Drag Along Curve via proxy Empty, Drag Power, keyframe toggle. Detach mutes instead of deleting. Rotation reset on Attach.</td></tr>
+    <tr><td>8–10 Sep</td><td>Status text, Switching panel, proximity detection with Enter/Exit range, switch keyframing, future-keyframe cleanup. Drag Slider replaces Mouse Drag as the main control. Three modal-transform crashes lead to a standing rule.</td></tr>
+    <tr><td>11–14 Sep</td><td>Vehicle panel with pivot list, auto-created pivot Empties on their own Follow Path, Pivot Data stub. Mute/enabled replaced by influence. Live switching, markers, EXTREME/BREAKDOWN keyframe types, cascade Remove Switch, auto-switch reconstruction.</td></tr>
+    <tr><td>After v8</td><td>Consist panel with wagons, cumulative route distance, route-history log, junction solving, wagons deciding forks themselves, stale-history pruning, Fix Train, Consist Debug box. <i>(Found in the latest source; not described in handoff v8.)</i></td></tr>
+  </tbody>
+</table>
+
+<h2>1.2 What the add-on can do today</h2>
+<table>
+  <thead><tr><th style="width:26%">Area</th><th>Feature</th><th style="width:13%">Status</th></tr></thead>
+  <tbody>
+    <tr><td>Track tools</td><td>“Track It” / “Bank It” mesh generators (leftovers from the legacy rig)</td><td><span class="pill p-part">Legacy</span></td></tr>
+    <tr><td>Attach</td><td>Attach selected at current world position, curve picker, Nearby Curves list sorted by nearest point</td><td><span class="pill p-done">Built</span></td></tr>
+    <tr><td>Attach</td><td>Detach bakes the pose and sets influence to 0 (constraint and keyframes kept)</td><td><span class="pill p-done">Built</span></td></tr>
+    <tr><td>Drive</td><td>Drag Slider (centre 0.5, springs back) + Drag Power</td><td><span class="pill p-done">Built</span></td></tr>
+    <tr><td>Drive</td><td>Mouse Drag (proxy Empty + G)</td><td><span class="pill p-bug">Deprecated</span></td></tr>
+    <tr><td>Drive</td><td>Drag Pad (2D N-panel pad, crash-safe Mouse Drag replacement)</td><td><span class="pill p-todo">Prototype, not in file</span></td></tr>
+    <tr><td>Keyframes</td><td>Keyframe all held constraints (offset + influence), context label, Remove Switch cascade with count dialog</td><td><span class="pill p-done">Built</span></td></tr>
+    <tr><td>Switching</td><td>Candidate discovery by proximity, Enter/Exit hysteresis, Switch button, HUD notice, marker + EXTREME key</td><td><span class="pill p-done">Built</span></td></tr>
+    <tr><td>Switching</td><td>Live switching (recorded fork, or unique continuation at a curve end), behind a checkbox</td><td><span class="pill p-part">Behind toggle</span></td></tr>
+    <tr><td>Switching</td><td>Auto-switch reconstruction (BREAKDOWN key from stashed crossing)</td><td><span class="pill p-done">Built</span></td></tr>
+    <tr><td>Vehicle</td><td>Pivot list: auto Empties, offset in metres, same-curve Follow Path</td><td><span class="pill p-done">Built</span></td></tr>
+    <tr><td>Vehicle</td><td>Pivots crossing onto a different curve than the root</td><td><span class="pill p-todo">Not built</span></td></tr>
+    <tr><td>Vehicle</td><td>Rig bone / object binding (Pivot Data fields)</td><td><span class="pill p-part">Stored, inert</span></td></tr>
+    <tr><td>Consist</td><td>Wagon list, coupling distances, route-distance history, wagons crossing forks and deciding forks when leading</td><td><span class="pill p-part">Prototype</span></td></tr>
+    <tr><td>Consist</td><td>Vehicle library, coupling/uncoupling, driving from any car</td><td><span class="pill p-todo">Not built</span></td></tr>
+    <tr><td>Wheels / rig</td><td>Auto wheel rotation, Direct mode, slip, sway, hunting, suspension</td><td><span class="pill p-todo">Concept only</span></td></tr>
+    <tr><td>Assets</td><td>Vehicle definition, asset library, validation</td><td><span class="pill p-todo">Concept only</span></td></tr>
+  </tbody>
+</table>
+
+<h2>1.3 How the current code is wired</h2>
+<p>The add-on is one 3,143-line file. It has three kinds of moving parts: <b>operators</b> the user clicks, <b>handlers</b> Blender calls on every update or frame change, and <b>data</b> stored on objects and the scene. The handlers do most of the work.</p>
+<figure>
+<svg viewBox="0 0 700 420">
+  <defs><marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" fill="#5b6673"/></marker></defs>
+  <!-- UI column -->
+  <rect x="5" y="5" width="165" height="410" rx="8" fill="#f4f6f9" stroke="#d5dbe2"/>
+  <text x="15" y="24" class="tb">N-panel sections</text>
+  <g class="t">
+    <rect x="15" y="36" width="145" height="26" rx="4" fill="#fff" stroke="#d5dbe2"/><text x="23" y="53">Track It / Bank It</text>
+    <rect x="15" y="68" width="145" height="26" rx="4" fill="#fff" stroke="#d5dbe2"/><text x="23" y="85">Vehicle + Pivot Data</text>
+    <rect x="15" y="100" width="145" height="26" rx="4" fill="#fff" stroke="#d5dbe2"/><text x="23" y="117">Consist + Wagon Data</text>
+    <rect x="15" y="132" width="145" height="26" rx="4" fill="#fff" stroke="#d5dbe2"/><text x="23" y="149">Attach to Track</text>
+    <rect x="15" y="164" width="145" height="26" rx="4" fill="#fff" stroke="#d5dbe2"/><text x="23" y="181">Drive</text>
+    <rect x="15" y="196" width="145" height="26" rx="4" fill="#fff" stroke="#d5dbe2"/><text x="23" y="213">Switching</text>
+    <rect x="15" y="228" width="145" height="26" rx="4" fill="#fff" stroke="#d5dbe2"/><text x="23" y="245">Consist Debug</text>
+  </g>
+  <!-- operators -->
+  <rect x="190" y="5" width="170" height="410" rx="8" fill="#e3ecf8" stroke="#b9cde8"/>
+  <text x="200" y="24" class="tb">Operators (clicks)</text>
+  <g class="ts">
+    <text x="200" y="46">attach_to_track_action</text>
+    <text x="200" y="62">detach_from_track_action</text>
+    <text x="200" y="78">refresh_curve_list</text>
+    <text x="200" y="94">toggle_offset_keyframe (+auto switch)</text>
+    <text x="200" y="110">remove_switch (cascade)</text>
+    <text x="200" y="126">switch_to_curve</text>
+    <text x="200" y="142">add/remove_vehicle_pivot</text>
+    <text x="200" y="158">add/remove_consist_wagon</text>
+    <text x="200" y="174">fix_consist · clear_consist_log</text>
+    <text x="200" y="190">toggle_drag_mode (deprecated)</text>
+  </g>
+  <text x="200" y="222" class="tb">Property callbacks</text>
+  <g class="ts">
+    <text x="200" y="242">drag_slider update → nudge offset</text>
+    <text x="200" y="258">   → live switch check</text>
+    <text x="200" y="274">   → idle timer → settle consist</text>
+    <text x="200" y="290">pivot / wagon offset update</text>
+    <text x="200" y="306">curve list index → target curve</text>
+  </g>
+  <!-- handlers -->
+  <rect x="380" y="5" width="165" height="410" rx="8" fill="#fbf1df" stroke="#ecd3a6"/>
+  <text x="390" y="24" class="tb">Handlers (automatic)</text>
+  <rect x="390" y="36" width="145" height="92" rx="4" fill="#fff" stroke="#c07a12"/>
+  <text x="398" y="52" class="t" font-weight="bold">switch_detect</text>
+  <text x="398" y="67" class="ts">depsgraph + frame change</text>
+  <text x="398" y="82" class="ts">1 sync held offsets</text>
+  <text x="398" y="96" class="ts">2 scan ALL curves (200 samples)</text>
+  <text x="398" y="110" class="ts">3 ready set + HUD</text>
+  <text x="398" y="123" class="ts" fill="#b3372f">active object only</text>
+  <rect x="390" y="138" width="145" height="92" rx="4" fill="#fff" stroke="#c07a12"/>
+  <text x="398" y="154" class="t" font-weight="bold">vehicle_pivot (+frame)</text>
+  <text x="398" y="169" class="ts">sync pivots (same curve)</text>
+  <text x="398" y="183" class="ts">update odometer + history</text>
+  <text x="398" y="197" class="ts">prune stale · sync wagons</text>
+  <text x="398" y="211" class="ts">frame pass: replace_pair</text>
+  <text x="398" y="224" class="ts" fill="#b3372f">active object only</text>
+  <rect x="390" y="240" width="145" height="50" rx="4" fill="#fff" stroke="#c07a12"/>
+  <text x="398" y="256" class="t" font-weight="bold">drag_handler</text>
+  <text x="398" y="271" class="ts">Mouse Drag Empty → offset</text>
+  <text x="398" y="284" class="ts">(deprecated path)</text>
+  <rect x="390" y="300" width="145" height="40" rx="4" fill="#fff" stroke="#c07a12"/>
+  <text x="398" y="316" class="t" font-weight="bold">HUD draw handler</text>
+  <text x="398" y="330" class="ts">“N Switches Available”</text>
+  <!-- data -->
+  <rect x="565" y="5" width="130" height="410" rx="8" fill="#eee8f8" stroke="#d2c6ea"/>
+  <text x="575" y="24" class="tb">Data</text>
+  <g class="ts">
+    <text x="575" y="44" font-weight="bold" fill="#1d232b">On each vehicle object</text>
+    <text x="575" y="58">Follow Path ×N (one per</text><text x="575" y="70">  curve ever near)</text>
+    <text x="575" y="84">offset / influence F-curves</text>
+    <text x="575" y="98">vehicle_pivots[]</text>
+    <text x="575" y="112">consist_wagons[]</text>
+    <text x="575" y="126">consist_history[]</text>
+    <text x="575" y="140">consist_distance, last_*</text>
+    <text x="575" y="154">last_live_switch (JSON)</text>
+    <text x="575" y="178" font-weight="bold" fill="#1d232b">On the scene</text>
+    <text x="575" y="192">target_curve, curve_list</text>
+    <text x="575" y="206">drag slider/power</text>
+    <text x="575" y="220">enter/exit range</text>
+    <text x="575" y="234">live_switching toggle</text>
+    <text x="575" y="248">timeline markers</text>
+    <text x="575" y="262">  “Switch: obj -> curve”</text>
+    <text x="575" y="286" font-weight="bold" fill="#1d232b">In Python memory only</text>
+    <text x="575" y="300">arc-table cache (by name)</text>
+    <text x="575" y="314">switch ready sets</text>
+    <text x="575" y="328">HUD message, timers</text>
+    <text x="575" y="350" fill="#b3372f">lost on reload,</text>
+    <text x="575" y="362" fill="#b3372f">not undo-aware</text>
+  </g>
+  <line x1="160" y1="125" x2="188" y2="125" stroke="#5b6673" marker-end="url(#a2)"/>
+  <line x1="360" y1="125" x2="388" y2="125" stroke="#5b6673" marker-end="url(#a2)"/>
+  <line x1="545" y1="200" x2="563" y2="200" stroke="#5b6673" marker-end="url(#a2)"/>
+</svg>
+<figcaption><b>Figure 1.2</b> Wiring map of <code>Track it compiled 1.py</code>. Both main handlers act only on the <i>active</i> object, which is behind the render and playback issues listed in 1.5.</figcaption>
+</figure>
+
+<h2>1.4 Handoff v8 vs the latest source</h2>
+<div class="callout c-now"><div class="tag">Reconciling the two sources</div>
+<ul>
+  <li>The latest source <b>goes beyond handoff v8</b>. It contains a full consist prototype: wagons, <code>TrackIt_ConsistHistoryEntry</code>, a cumulative route-distance odometer, <code>_track_it_find_junction</code>, <code>_track_it_resolve_route_position</code>, stale-history pruning, Fix Train, and the Consist Debug box. That is v8's Section 8.2/8.3 “theory” partly built for <i>wagons</i>, but not yet for <i>pivots</i>.</li>
+  <li>The <b>Drag Pad</b> prototype v8 describes (<code>_track_it_draw_drag_pad</code>, <code>OT_DragPadGrab_Action</code>) is <b>not in this file</b>. It is probably in the backed-up fork. Worth recovering before Phase 2 (Part 11).</li>
+  <li><code>bl_info</code> still says version <b>(1, 32)</b> and Blender <b>(3, 0, 0)</b>. The code uses the layered-Action API (<code>action.layers → strips → channelbag</code>), which only exists in recent Blender (the project runs 5.1). The minimum version should be raised so older Blenders refuse to load it cleanly.</li>
+  <li>A <b>v9 handoff</b> should record the consist work. This guide can stand in until then.</li>
+</ul></div>
+
+<h2>1.5 Code audit: issues found</h2>
+<p>Line numbers refer to the latest <code>Track it compiled 1.py</code>. Severity: <span class="pill p-bug">High</span> gives wrong results or breaks renders, <span class="pill p-part">Med</span> is fragile or slow, <span class="pill p-todo">Low</span> is tidy-up.</p>
+<table>
+  <thead><tr><th style="width:4%">#</th><th style="width:11%">Sev.</th><th style="width:40%">Issue</th><th>Why it matters / fix direction</th></tr></thead>
+  <tbody>
+    <tr><td>1</td><td><span class="pill p-bug">High</span></td><td><b>Syncing only happens for the active object.</b> Both handlers start with <code>view_layer.objects.active</code> (L1171, L2361).</td><td>Pivots, wagons and held-offset sync freeze whenever a different object is selected: during playback, during a render, or when a second train exists. Fix: evaluate every registered vehicle, not the selection (Part 7, render-safe evaluation).</td></tr>
+    <tr><td>2</td><td><span class="pill p-bug">High</span></td><td><b>Arc-table cache never invalidates.</b> <code>_track_it_switch_arc_cache</code> is keyed by curve <i>name</i> and only cleared on unregister (L1036–1046, L3111).</td><td>Edit, extend or move a curve after it has been used and every offset computed against it is silently wrong until the add-on reloads. Renaming a curve can also hit a stale entry. Fix: key by object pointer plus a hash of points, handles, tilt, <code>matrix_world</code> and resolution.</td></tr>
+    <tr><td>3</td><td><span class="pill p-bug">High</span></td><td><b>Pivots still clamp to the root's curve</b> (L1731). The consist code already solved crossing for wagons but pivots don't use it.</td><td>This is v8's §3.3 gap: a pivot past a curve end snaps to the boundary and the wheelbase breaks. Fix: pivots resolve through the same route resolver as wagons (Part 6).</td></tr>
+    <tr><td>4</td><td><span class="pill p-bug">High?</span></td><td><b>Wagons clone the root with <code>root.copy()</code></b> (L2554). Object-level collection properties (<code>track_it_vehicle_pivots</code>, <code>track_it_consist_wagons</code>, history) are ID properties and are very likely copied too.</td><td>A wagon may inherit a wagon list that points at itself and the root's pivot Empties. If the wagon ever becomes active, the handler would sync that inherited list and fight the real root. <i>Verify in Blender</i>, then clear those collections on the clone.</td></tr>
+    <tr><td>5</td><td><span class="pill p-part">Med</span></td><td><b>Per-tick cost grows with the scene.</b> Job 2 scans <i>every</i> curve at 200 samples on every depsgraph update. <code>closest_offset_factor</code> is a 5,000-point brute-force loop.</td><td>Fine for a test scene, slow on a real layout. Fix: a precomputed Track Network (Part 4) plus a spatial grid or KD-tree (<code>mathutils.kdtree</code>) per curve.</td></tr>
+    <tr><td>6</td><td><span class="pill p-part">Med</span></td><td><b>Handlers write RNA inside <code>depsgraph_update_post</code>.</b></td><td>Every write triggers another update pass. Guards (skip if unchanged) keep this finite, but it is a feedback loop. Prefer <code>frame_change_pre</code> for animation-driven work and do UI-driven work in the operator or callback itself.</td></tr>
+    <tr><td>7</td><td><span class="pill p-part">Med</span></td><td><b>Two history systems.</b> Keyframe mining (<code>_find_recorded_switch_point</code>) for the root, and the odometer log for wagons.</td><td>They can disagree. Keyframe mining was already contaminated twice by leftover test keys, and the odometer needs drift heuristics (<code>replace_pair</code>, DEDUP_EPS). Fix: one Route Plan (Part 5).</td></tr>
+    <tr><td>8</td><td><span class="pill p-part">Med</span></td><td><b>Identity by name strings.</b> Ready sets store <code>curve.name</code>, markers encode <code>obj.name</code>, constraints are named <code>FollowPath_{curve}</code>.</td><td>Renaming a vehicle orphans its switch markers, and renaming a curve breaks constraint lookup names. Fix: a stable UUID custom property on every managed object; match by pointer.</td></tr>
+    <tr><td>9</td><td><span class="pill p-part">Med</span></td><td><b><code>build_arc_table</code> ignores cyclic splines</b> and spreads samples evenly per segment regardless of segment length.</td><td>Closed loops (roundy-round layouts) are missing the closing segment. Long segments get fewer samples per metre. Fix: sample the <i>evaluated</i> curve (depsgraph polyline Blender itself follows) including the cyclic segment.</td></tr>
+    <tr><td>10</td><td><span class="pill p-part">Med</span></td><td><b>Python-only state isn't undo-aware</b> (ready sets, caches).</td><td>After Ctrl+Z the Switching panel can show stale candidates until the next move. Fix: rebuild on <code>undo_post</code> / <code>load_post</code>.</td></tr>
+    <tr><td>11</td><td><span class="pill p-todo">Low</span></td><td>The Drag Slider registers a new timer on every update (L473).</td><td>Harmless but wasteful. Check <code>bpy.app.timers.is_registered</code> first.</td></tr>
+    <tr><td>12</td><td><span class="pill p-todo">Low</span></td><td>Mute/enabled writes still sprinkled through the code after the influence migration.</td><td>Add a one-time “Migrate constraints” operator, then delete the dual-state code.</td></tr>
+    <tr><td>13</td><td><span class="pill p-todo">Low</span></td><td>“Track It” / “Bank It” operators generate legacy shrinkwrap planes with <code>bpy.ops</code> chains.</td><td>Nothing in the new architecture needs them. Replace with a Track Builder (Part 4).</td></tr>
+    <tr><td>14</td><td><span class="pill p-todo">Low</span></td><td>Single file, globals, no tests.</td><td>Split into a package (Part 3 §3.5) and add headless Blender tests (Part 11).</td></tr>
+  </tbody>
+</table>
+
+<h2>1.6 What “finished” means</h2>
+<p>Pulling the goals from every session together, the add-on is complete when an artist can:</p>
+<ol>
+  <li><b>Build or import track</b> quickly, with banking and switches, and have the add-on understand how the pieces connect.</li>
+  <li><b>Turn any model into a vehicle</b> (mine cart, subway car, 2-4-2 steam locomotive) through a guided set-up, and save it to a library.</li>
+  <li><b>Couple vehicles into a train</b>, drag it anywhere including backwards through switches, and have every car and every bogie stay on the correct rails.</li>
+  <li><b>Animate it</b> with ordinary keyframes and easing, with wheels, rods and secondary motion following automatically, or take manual control of any wheel for slip or slide.</li>
+  <li><b>Render it reliably</b>, on a farm or in the background, and get the same result every time.</li>
+</ol>
+<p>The rest of this guide is the plan for getting there.</p>
+</body></html>

@@ -1,0 +1,389 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Part 2 · Curves explained</title>
+<link rel="stylesheet" href="style.css"></head>
+<body data-footer="Part 2 · Curves explained (visual)">
+
+<div class="opener">
+  <div class="part-kicker">Part 2 · Visual explainer</div>
+  <h1 class="part-title">How curves work, and how Track It moves things along them</h1>
+  <p class="part-lede">A picture-first walk through what Blender stores inside a curve, how Follow Path turns it into motion, and exactly what each Track It feature adds on top. Every later Part builds on this one.</p>
+</div>
+<div class="toc-part">
+  <div>2.1 What a curve object contains</div><div>2.2 How a Bézier segment is shaped</div>
+  <div>2.3 Parameter t vs real distance</div><div>2.4 What Blender actually follows</div>
+  <div>2.5 Follow Path, the engine</div><div>2.6 Orientation, tilt and banking</div>
+  <div>2.7 Why objects “jump” on attach</div><div>2.8 Direction, point order, extra splines</div>
+  <div>2.9 Track It's Attach, step by step</div><div>2.10 Animating: offset_factor over time</div>
+  <div>2.11 Many constraints, one active</div><div>2.12 Pivots and wagons: derived points</div>
+  <div>2.13 One frame, start to finish</div><div>2.14 Rules of thumb for track curves</div>
+</div>
+
+<h2>2.1 What a curve object contains</h2>
+<p>A “curve” in Blender is three nested things. The <b>object</b> gives it a place in the world, the <b>curve data</b> holds the settings, and inside that is a list of <b>splines</b>, each a chain of points. Track It only cares about the first spline.</p>
+<figure>
+<svg viewBox="0 0 700 250">
+  <rect x="10" y="10" width="680" height="230" rx="10" fill="#f4f6f9" stroke="#d5dbe2"/>
+  <text x="24" y="34" class="tb">Object “Mainline”  (type CURVE)</text>
+  <text x="24" y="52" class="ts">matrix_world: location / rotation / scale. Moves the whole track in the world</text>
+  <rect x="24" y="64" width="652" height="164" rx="8" fill="#e3ecf8" stroke="#b9cde8"/>
+  <text x="38" y="86" class="tb">Curve data  (bpy.types.Curve)</text>
+  <text x="38" y="102" class="ts">dimensions 3D · resolution_u · twist_method · path_duration · bevel/extrude (for the visible rail)</text>
+  <rect x="38" y="112" width="400" height="104" rx="6" fill="#fff" stroke="#2a5d9f" stroke-width="2"/>
+  <text x="50" y="132" class="tb">splines[0]  ← the only one Follow Path reads</text>
+  <g>
+    <circle cx="70" cy="180" r="7" fill="#2a5d9f"/><text x="60" y="206" class="ts">pt 0</text>
+    <circle cx="170" cy="165" r="7" fill="#2a5d9f"/><text x="160" y="206" class="ts">pt 1</text>
+    <circle cx="270" cy="175" r="7" fill="#2a5d9f"/><text x="260" y="206" class="ts">pt 2</text>
+    <circle cx="370" cy="160" r="7" fill="#2a5d9f"/><text x="360" y="206" class="ts">pt 3</text>
+    <path d="M70 180 C110 150,130 165,170 165 S240 190,270 175 S330 150,370 160" fill="none" stroke="#2a5d9f" stroke-width="2"/>
+    <text x="60" y="152" class="ts">start (factor 0)</text><text x="330" y="146" class="ts">end (factor 1)</text>
+  </g>
+  <rect x="452" y="112" width="210" height="104" rx="6" fill="#fff" stroke="#b3372f" stroke-dasharray="5 4"/>
+  <text x="464" y="132" class="tb" fill="#b3372f">splines[1], [2] …</text>
+  <text x="464" y="150" class="ts">Created by duplicating points or</text>
+  <text x="464" y="164" class="ts">joining curves in edit mode.</text>
+  <text x="464" y="182" class="ts">Invisible to Follow Path, but seen</text>
+  <text x="464" y="196" class="ts">by the add-on's proximity check.</text>
+  <text x="464" y="210" class="t" fill="#b3372f">→ never use on a track</text>
+</svg>
+<figcaption><b>Figure 2.1</b> The object → data → spline → point nesting. Tested in session 4: sweeping offset_factor 0→1 on a two-spline curve only ever travelled spline 0.</figcaption>
+</figure>
+
+<div class="grid2">
+<div class="card"><h4>What each Bézier point stores</h4>
+<ul class="small" style="color:#1d232b">
+  <li><code>co</code>: the point's position (in the curve's <i>local</i> space)</li>
+  <li><code>handle_left</code>, <code>handle_right</code>: steer the shape either side</li>
+  <li><code>tilt</code>: roll around the track direction. This is your <b>superelevation</b></li>
+  <li><code>radius</code>: scales bevel, and scales objects if “Curve Radius” is on (Track It leaves it off)</li>
+</ul></div>
+<div class="card"><h4>Bézier vs Poly/NURBS (“paths”)</h4>
+<p class="small" style="color:#1d232b">A <b>Path</b> object (Add → Curve → Path) is a NURBS spline. It starts straight, which is why the switching tests used them. Its points have no handles; the shape comes from point weights. The add-on handles both: Bézier gets the cubic formula, the others are treated as straight lines between points, which is only an approximation for NURBS (Part 4).</p></div>
+</div>
+
+<h2>2.2 How a Bézier segment is shaped</h2>
+<p>Between two neighbouring points, Blender draws a <b>cubic Bézier</b>. It starts at point A heading toward A's right handle, ends at point B arriving from B's left handle, and blends smoothly in between. A single number <b>t</b> runs from 0 at A to 1 at B:</p>
+<pre>position(t) = (1−t)³·A  +  3(1−t)²t·A.handle_right  +  3(1−t)t²·B.handle_left  +  t³·B</pre>
+<figure>
+<svg viewBox="0 0 700 250">
+  <!-- handles -->
+  <line x1="60" y1="200" x2="90" y2="40" stroke="#c07a12" stroke-width="1.5" stroke-dasharray="4 3"/>
+  <line x1="640" y1="190" x2="520" y2="60" stroke="#c07a12" stroke-width="1.5" stroke-dasharray="4 3"/>
+  <circle cx="90" cy="40" r="5" fill="#fff" stroke="#c07a12" stroke-width="2"/>
+  <circle cx="520" cy="60" r="5" fill="#fff" stroke="#c07a12" stroke-width="2"/>
+  <text x="100" y="38" class="ts">A.handle_right (long, steep)</text>
+  <text x="400" y="52" class="ts">B.handle_left</text>
+  <!-- curve -->
+  <path d="M60 200 C90 40 520 60 640 190" fill="none" stroke="#2a5d9f" stroke-width="3.5"/>
+  <circle cx="60" cy="200" r="7" fill="#2a5d9f"/><text x="40" y="228" class="tb">A  (t = 0)</text>
+  <circle cx="640" cy="190" r="7" fill="#2a5d9f"/><text x="600" y="228" class="tb">B  (t = 1)</text>
+  <!-- t markers -->
+  <g fill="#1d232b">
+    <circle cx="175.8" cy="102.7" r="3.5"/><text x="150" y="124" class="ts">t=0.3</text>
+    <circle cx="316.2" cy="86.2" r="4.5" fill="#b3372f"/><text x="296" y="110" class="ts" fill="#b3372f">t=0.5</text>
+    <circle cx="467.5" cy="104.6" r="3.5"/><text x="455" y="127" class="ts">t=0.7</text>
+  </g>
+  <text x="200" y="175" class="t">The handles pull the curve. Longer handle = the curve “leans” further that way.</text>
+  <text x="200" y="192" class="ts">A curve with many points is just many of these segments end to end, each with its own t.</text>
+</svg>
+<figcaption><b>Figure 2.2</b> One Bézier segment drawn from its four controls, which is exactly what <code>build_arc_table</code> evaluates in the add-on.</figcaption>
+</figure>
+
+<h2>2.3 Parameter t vs real distance</h2>
+<p>This is the single most important idea for the whole system. <b>Equal steps of t are not equal steps of distance.</b> Where handles are long or points are bunched, t races ahead; elsewhere it crawls. In the segment above, <b>t = 0.5 is only 46% of the way along</b>.</p>
+<figure>
+<svg viewBox="0 0 700 330">
+  <text x="10" y="18" class="tb">Top: 10 equal steps of t     Bottom: 10 equal steps of distance (arc length)</text>
+  <path d="M60 170 C90 10 520 30 640 160" fill="none" stroke="#2a5d9f" stroke-width="3"/>
+  <g fill="#b3372f">
+    <circle cx="60" cy="170" r="4"/><circle cx="80.3" cy="127.3" r="4"/><circle cx="120.3" cy="95" r="4"/><circle cx="175.8" cy="72.7" r="4"/><circle cx="242.6" cy="59.9" r="4"/><circle cx="316.2" cy="56.2" r="4"/><circle cx="392.6" cy="61.3" r="4"/><circle cx="467.5" cy="74.6" r="4"/><circle cx="536.5" cy="95.8" r="4"/><circle cx="595.4" cy="124.4" r="4"/><circle cx="640" cy="160" r="4"/>
+  </g>
+  <text x="250" y="110" class="t" fill="#b3372f">uneven: bunched at the ends, stretched in the middle</text>
+  <path d="M60 310 C90 150 520 170 640 300" fill="none" stroke="#2a5d9f" stroke-width="3"/>
+  <g fill="#2f7d4f">
+    <circle cx="60" cy="310" r="4"/><circle cx="92.3" cy="254.9" r="4"/><circle cx="147.8" cy="222.1" r="4"/><circle cx="209.7" cy="204.8" r="4"/><circle cx="275.1" cy="197.2" r="4"/><circle cx="339.1" cy="196.9" r="4"/><circle cx="404.1" cy="202.8" r="4"/><circle cx="467.5" cy="214.6" r="4"/><circle cx="530" cy="233.3" r="4"/><circle cx="588.7" cy="260.4" r="4"/><circle cx="640" cy="300" r="4"/>
+  </g>
+  <text x="250" y="250" class="t" fill="#2f7d4f">even: every dot is the same distance apart</text>
+</svg>
+<figcaption><b>Figure 2.3</b> Real geometry, computed. A train driven by raw t would speed up and slow down on its own. Follow Path's <code>offset_factor</code> uses the green spacing, and so does the add-on's arc table.</figcaption>
+</figure>
+<div class="callout c-now"><div class="tag">Confirmed in the project</div>
+<p><b>offset_factor = distance along the curve ÷ total curve length.</b> Setting 0.25 puts the object a quarter of the way along in metres, whatever the handles look like. That is why an offset in metres converts to a factor with one division, <code>metres / length</code>, which is exactly what the pivot and consist code does.</p></div>
+
+<h2>2.4 What Blender actually follows</h2>
+<p>Blender doesn't evaluate the smooth formula at render time. It chops each segment into <b><code>resolution_u</code></b> straight pieces and follows that <b>polyline</b>. With a low resolution, a curve's real “followed” shape differs slightly from the smooth one:</p>
+<figure>
+<svg viewBox="0 0 700 200">
+  <path d="M60 180 C90 20 520 40 640 170" fill="none" stroke="#2a5d9f" stroke-width="2" opacity=".35"/>
+  <polyline points="60,180 146.4,92.7 316.2,66.2 503,94.2 640,170" fill="none" stroke="#b3372f" stroke-width="2"/>
+  <polyline points="60,180 75.4,143.7 105,114.7 146.4,92.7 197,77.4 254.5,68.7 316.2,66.2 379.9,69.9 443,79.3 503,94.2 557.5,114.5 604,139.8 640,170" fill="none" stroke="#2f7d4f" stroke-width="2"/>
+  <text x="250" y="120" class="t" fill="#b3372f">resolution_u = 4 (visible corners)</text>
+  <text x="250" y="138" class="t" fill="#2f7d4f">resolution_u = 12 (default: very close)</text>
+  <text x="250" y="156" class="ts">faint blue = the ideal smooth curve</text>
+</svg>
+<figcaption><b>Figure 2.4</b> Keep track curves at resolution 12 or higher. Proposal (Part 4): build the arc table from the <i>evaluated</i> polyline, the same data Follow Path uses, so the add-on and Blender agree exactly.</figcaption>
+</figure>
+
+<h2>2.5 Follow Path, the engine</h2>
+<p>Everything Track It does comes down to setting properties on Blender's own <b>Follow Path</b> constraint. The constraint has two modes, and the project chose the second one:</p>
+<figure>
+<svg viewBox="0 0 700 215">
+  <rect x="5" y="5" width="340" height="205" rx="8" fill="#f9e5e3" stroke="#eab9b4"/>
+  <text x="18" y="26" class="tb">Mode A: “Animate Path” (default)</text>
+  <text x="18" y="44" class="ts">Position comes from the timeline:</text>
+  <text x="18" y="60" class="mono" fill="#1d232b">frame − offset → eval_time / path_duration</text>
+  <line x1="30" y1="100" x2="320" y2="100" stroke="#2a5d9f" stroke-width="3"/>
+  <text x="30" y="92" class="ts">frame 1</text><text x="270" y="92" class="ts">frame 100</text>
+  <circle cx="120" cy="100" r="7" fill="#c07a12"/>
+  <text x="18" y="130" class="t">✗ offset is measured in <tspan font-weight="bold">frames</tspan></text>
+  <text x="18" y="148" class="t">✗ object always starts at the curve start</text>
+  <text x="18" y="166" class="t">✗ moving depends on the playhead</text>
+  <text x="18" y="190" class="ts">(the “−99.8 offset” Cube.007 was in this mode)</text>
+
+  <rect x="355" y="5" width="340" height="205" rx="8" fill="#e4f3ea" stroke="#b7dcc5"/>
+  <text x="368" y="26" class="tb">Mode B: Fixed Position ✓ (Track It)</text>
+  <text x="368" y="44" class="ts">use_fixed_location = True</text>
+  <text x="368" y="60" class="mono" fill="#1d232b">offset_factor 0.0 … 1.0 = where it sits</text>
+  <line x1="380" y1="100" x2="670" y2="100" stroke="#2a5d9f" stroke-width="3"/>
+  <text x="378" y="92" class="ts">0.0</text><text x="515" y="92" class="ts">0.5</text><text x="655" y="92" class="ts">1.0</text>
+  <circle cx="525" cy="100" r="7" fill="#c07a12"/>
+  <text x="368" y="130" class="t">✓ a plain number you can keyframe</text>
+  <text x="368" y="148" class="t">✓ can be set to “where it is now”</text>
+  <text x="368" y="166" class="t">✓ frame-independent; easing = speed</text>
+  <text x="368" y="190" class="ts">forward_axis FORWARD_Y · up_axis UP_Z · Follow Curve on</text>
+</svg>
+<figcaption><b>Figure 2.5</b> The two Follow Path modes. Every constraint Track It creates uses Fixed Position.</figcaption>
+</figure>
+
+<h2>2.6 Orientation, tilt and banking</h2>
+<p>With <b>Follow Curve</b> on, the constraint also rotates the object. At the object's point on the curve Blender builds a little coordinate frame: <b>forward</b> = the curve's direction there (the tangent), <b>up</b> = the curve's normal, then rolled by the point's <b>tilt</b>. The object's local <b>+Y</b> is aimed forward and its <b>+Z</b> up.</p>
+<figure>
+<svg viewBox="0 0 700 250">
+  <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="context-stroke"/></marker></defs>
+  <path d="M30 200 C 180 200, 250 90, 420 80" fill="none" stroke="#2a5d9f" stroke-width="3"/>
+  <!-- frame at a point -->
+  <circle cx="250" cy="126" r="6" fill="#c07a12"/>
+  <line x1="250" y1="126" x2="320" y2="95" stroke="#2f7d4f" stroke-width="2.5" marker-end="url(#ar)"/>
+  <text x="300" y="140" class="t" fill="#2f7d4f">forward = tangent → object +Y</text>
+  <line x1="250" y1="126" x2="222" y2="62" stroke="#6a4aa5" stroke-width="2.5" marker-end="url(#ar)"/>
+  <text x="140" y="54" class="t" fill="#6a4aa5">up = normal (+ tilt) → object +Z</text>
+  <text x="40" y="230" class="ts">Side/top view: the frame travels with the object as offset_factor changes.</text>
+  <!-- tilt cross-section -->
+  <g transform="translate(470,20)">
+    <rect x="0" y="0" width="220" height="210" rx="8" fill="#f4f6f9" stroke="#d5dbe2"/>
+    <text x="12" y="20" class="tb">Looking down the track</text>
+    <g transform="translate(60,120)">
+      <line x1="-40" y1="0" x2="40" y2="0" stroke="#5b6673" stroke-width="4"/>
+      <rect x="-22" y="-44" width="44" height="40" fill="#1d232b" rx="3"/>
+      <text x="-38" y="22" class="ts">tilt 0°</text>
+    </g>
+    <g transform="translate(160,120) rotate(-12)">
+      <line x1="-40" y1="0" x2="40" y2="0" stroke="#5b6673" stroke-width="4"/>
+      <rect x="-22" y="-44" width="44" height="40" fill="#1d232b" rx="3"/>
+    </g>
+    <text x="132" y="150" class="ts">tilt 12°</text>
+    <text x="12" y="178" class="ts">Tilt set on curve points in edit mode</text>
+    <text x="12" y="192" class="ts">(Ctrl+T) = superelevation. It banks</text>
+    <text x="12" y="206" class="ts">the train for free, no bank plane needed.</text>
+  </g>
+</svg>
+<figcaption><b>Figure 2.6</b> This replaced the legacy direction plane and bank plane. The curve itself now carries heading and banking.</figcaption>
+</figure>
+<div class="callout c-warn"><div class="tag">Watch out</div>
+<p>On curves that climb or twist sharply, the “up” direction can flip or wander (Blender's <code>twist_method</code>: Minimum / Tangent / Z-Up). For railways, <b>Z-Up</b> is usually the calm choice, since track is mostly flat with gentle grades. Track Doctor (Part 4) should warn when it isn't set.</p></div>
+
+<h2>2.7 Why objects “jump” on attach</h2>
+<p>The early sessions fought this for a whole day (the “error 1–4” cones). The reason: with Follow Path active, the object's <b>own</b> location and rotation don't disappear. They are applied <b>on top of</b> the curve point, inside the curve's moving frame.</p>
+<figure>
+<svg viewBox="0 0 700 220">
+  <defs><marker id="aj" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" fill="#5b6673"/></marker></defs>
+  <path d="M20 170 C 200 170, 300 120, 680 110" fill="none" stroke="#2a5d9f" stroke-width="3"/>
+  <circle cx="300" cy="136" r="6" fill="#2a5d9f"/><text x="262" y="160" class="ts">curve point at offset</text>
+  <!-- bad -->
+  <rect x="440" y="20" width="40" height="28" fill="#b3372f" rx="3"/><text x="488" y="38" class="t" fill="#b3372f">where it ends up (jump!)</text>
+  <line x1="300" y1="136" x2="440" y2="48" stroke="#b3372f" stroke-width="2" stroke-dasharray="5 4" marker-end="url(#aj)"/>
+  <text x="330" y="80" class="ts" fill="#b3372f">+ object's old location (46, −436, 2.7)</text>
+  <text x="330" y="94" class="ts" fill="#b3372f">  rotated into the curve frame</text>
+  <!-- good -->
+  <rect x="282" y="112" width="36" height="24" fill="#2f7d4f" rx="3" opacity=".9"/>
+  <text x="20" y="200" class="t"><tspan font-weight="bold">Final position = curve point · curve frame · (object's own local transform)</tspan></text>
+  <text x="20" y="216" class="ts">Fix used by Attach: compute the offset first, then set the object's local location and rotation to zero, so the constraint alone places it.</text>
+</svg>
+<figcaption><b>Figure 2.7</b> The same rule explains the “re-attach sits wrong” bug (baked rotation left on the object) and the pivot re-attach jump. Both were fixed by resetting to identity every time.</figcaption>
+</figure>
+
+<h2>2.8 Direction, point order and extra splines</h2>
+<div class="grid2">
+<figure style="margin:0">
+<svg viewBox="0 0 340 200">
+  <text x="8" y="16" class="tb">Point order = direction</text>
+  <path d="M20 150 C 90 60, 200 60, 320 120" fill="none" stroke="#2a5d9f" stroke-width="3"/>
+  <g class="ts">
+    <circle cx="20" cy="150" r="5" fill="#2f7d4f"/><text x="6" y="172">idx 0 = factor 0</text>
+    <circle cx="320" cy="120" r="5" fill="#b3372f"/><text x="238" y="142">last idx = factor 1</text>
+  </g>
+  <path d="M150 70 l18 -4 l-12 12" fill="none" stroke="#1d232b" stroke-width="2"/>
+  <text x="8" y="192" class="ts">Extruding back from the start inserts the new points at index 0.</text>
+</svg></figure>
+<figure style="margin:0">
+<svg viewBox="0 0 340 200">
+  <text x="8" y="16" class="tb">Switch Direction flips everything</text>
+  <path d="M20 150 C 90 60, 200 60, 320 120" fill="none" stroke="#2a5d9f" stroke-width="3"/>
+  <circle cx="20" cy="150" r="5" fill="#b3372f"/><circle cx="320" cy="120" r="5" fill="#2f7d4f"/>
+  <path d="M168 66 l-18 4 l12 -12" fill="none" stroke="#1d232b" stroke-width="2"/>
+  <text x="8" y="172" class="ts">factor f becomes 1 − f. Keyframed offsets</text>
+  <text x="8" y="186" class="ts">would then run backwards. Track Doctor should</text>
+  <text x="8" y="200" class="ts">warn before direction is changed on a used track.</text>
+</svg></figure>
+</div>
+<p>Two practical consequences: a curve's “forward” is set by how it was drawn, and joining two curves (Ctrl+J / F) can leave them facing opposite ways. The Track Network (Part 4) stores, for each connection, whether factor increases or decreases across it. Then direction never has to match.</p>
+
+<h2>2.9 Track It's Attach, step by step</h2>
+<figure>
+<svg viewBox="0 0 700 250">
+  <defs><marker id="as" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" fill="#5b6673"/></marker></defs>
+  <path d="M20 200 C 150 200, 250 110, 420 100 S 620 140, 690 90" fill="none" stroke="#2a5d9f" stroke-width="3"/>
+  <!-- samples -->
+  <g fill="#2a5d9f" opacity=".55">
+    <circle cx="60" cy="199" r="2"/><circle cx="100" cy="196" r="2"/><circle cx="140" cy="189" r="2"/><circle cx="180" cy="175" r="2"/><circle cx="220" cy="155" r="2"/><circle cx="260" cy="135" r="2"/><circle cx="300" cy="119" r="2"/><circle cx="340" cy="108" r="2"/><circle cx="380" cy="102" r="2"/><circle cx="420" cy="100" r="2"/><circle cx="460" cy="103" r="2"/><circle cx="500" cy="110" r="2"/><circle cx="540" cy="117" r="2"/><circle cx="580" cy="118" r="2"/><circle cx="620" cy="112" r="2"/><circle cx="660" cy="100" r="2"/>
+  </g>
+  <rect x="332" y="30" width="30" height="24" fill="#1d232b" rx="3"/><text x="370" y="46" class="t">object, sitting near the track</text>
+  <line x1="347" y1="54" x2="342" y2="104" stroke="#c07a12" stroke-width="2" stroke-dasharray="4 3" marker-end="url(#as)"/>
+  <circle cx="340" cy="108" r="5" fill="#c07a12"/>
+  <text x="20" y="226" class="ts">① sample 5,000 points + running length   ② nearest sample to the object   ③ factor = length-so-far ÷ total</text><text x="20" y="242" class="ts">④ zero the object's local location/rotation   ⑤ Follow Path at that factor</text>
+  <text x="350" y="140" class="t" fill="#c07a12">nearest: 212.4 m of 663.1 m → 0.3203</text>
+</svg>
+<figcaption><b>Figure 2.8</b> What <code>OT_AttachToTrack_Action</code> does (numbers illustrative). The same nearest-point math powers Nearby Curves, held-offset sync and Mouse Drag.</figcaption>
+</figure>
+<p>Attach also reuses an existing constraint for that curve if the object has been attached before, and sets every other Follow Path to influence 0. That is covered in §2.11.</p>
+
+<h2>2.10 Animating: offset_factor over time</h2>
+<p>Once attached, animating a train means keyframing <code>offset_factor</code>. The F-curve in the Graph Editor then reads directly as <b>position over time</b>, and its slope is speed:</p>
+<figure>
+<svg viewBox="0 0 700 250">
+  <rect x="50" y="15" width="620" height="190" fill="#f4f6f9" stroke="#d5dbe2"/>
+  <g class="ts"><text x="10" y="24">1.0</text><text x="10" y="112">0.5</text><text x="10" y="206">0.0</text>
+  <text x="46" y="224">frame 1</text><text x="620" y="224">frame 240</text></g>
+  <path d="M50 205 C 180 205, 200 150, 330 110 S 520 20, 670 18" fill="none" stroke="#2a5d9f" stroke-width="3"/>
+  <g fill="#2a5d9f"><circle cx="50" cy="205" r="5"/><circle cx="330" cy="110" r="5"/><circle cx="670" cy="18" r="5"/></g>
+  <text x="70" y="192" class="t">flat = standing still</text>
+  <text x="170" y="150" class="t">steepening = accelerating</text>
+  <text x="430" y="92" class="t">flattening = braking</text>
+  <text x="50" y="243" class="t"><tspan font-weight="bold">speed (m/s) = slope (factor per frame) × curve length (m) × fps</tspan></text>
+</svg>
+<figcaption><b>Figure 2.9</b> One F-curve per held constraint. The catch: the same slope means a different speed on a 100 m curve than on a 2 km one. That is why Part 7 proposes animating <b>route distance in metres</b> instead.</figcaption>
+</figure>
+<p>The <b>Drag Slider</b> is a live way to change that value without keyframing: every slider update nudges offset_factor by <code>(slider − 0.5) × 2 × Drag Power × Δt</code>. Nothing is written to the timeline until you press Keyframe.</p>
+
+<h2>2.11 Many constraints, one active: how switching works</h2>
+<p>An object can carry several Follow Path constraints at once, one per curve it has been near. Blender blends constraints by <b>influence</b>. Track It keeps exactly one at 1.0 and the rest at 0.0, and switches by swapping which one is 1.0:</p>
+<figure>
+<svg viewBox="0 0 700 270">
+  <!-- stack -->
+  <rect x="5" y="5" width="260" height="260" rx="8" fill="#f4f6f9" stroke="#d5dbe2"/>
+  <text x="18" y="26" class="tb">Constraint stack on “Loco”</text>
+  <rect x="18" y="40" width="234" height="58" rx="5" fill="#fff" stroke="#2f7d4f" stroke-width="2"/>
+  <text x="28" y="58" class="t" font-weight="bold">FollowPath_Mainline</text>
+  <text x="28" y="74" class="ts">influence 1.0 · offset 0.482 ← drives</text>
+  <rect x="28" y="82" width="214" height="8" fill="#e4f3ea"/><rect x="28" y="82" width="214" height="8" fill="#2f7d4f"/>
+  <rect x="18" y="106" width="234" height="58" rx="5" fill="#fff" stroke="#d5dbe2"/>
+  <text x="28" y="124" class="t" font-weight="bold">FollowPath_Siding</text>
+  <text x="28" y="140" class="ts">influence 0.0 · offset 0.091 ← kept in sync</text>
+  <rect x="28" y="148" width="214" height="8" fill="#eceff3"/>
+  <rect x="18" y="172" width="234" height="58" rx="5" fill="#fff" stroke="#d5dbe2"/>
+  <text x="28" y="190" class="t" font-weight="bold">FollowPath_Yard3</text>
+  <text x="28" y="206" class="ts">influence 0.0 · offset 0.000 (far away)</text>
+  <rect x="28" y="214" width="214" height="8" fill="#eceff3"/>
+  <text x="18" y="252" class="ts">All stay unmuted; influence is the only switch.</text>
+  <!-- geometry -->
+  <path d="M290 200 C 400 200, 480 200, 690 200" fill="none" stroke="#2a5d9f" stroke-width="3"/>
+  <path d="M330 202 C 430 202, 520 190, 690 120" fill="none" stroke="#2a5d9f" stroke-width="3" stroke-dasharray="8 5"/>
+  <rect x="370" y="186" width="150" height="30" rx="4" fill="#fbf1df" stroke="#c07a12"/>
+  <text x="378" y="236" class="ts">overlap zone: both curves share the rails</text>
+  <text x="378" y="250" class="ts">Siding's offset is shadow-tracked here</text>
+  <line x1="520" y1="180" x2="520" y2="222" stroke="#b3372f" stroke-dasharray="3 3"/>
+  <text x="524" y="176" class="ts" fill="#b3372f">divergence</text>
+  <rect x="420" y="190" width="26" height="14" fill="#1d232b" rx="2"/>
+  <text x="600" y="112" class="ts">Siding</text><text x="620" y="192" class="ts">Mainline</text>
+  <text x="290" y="30" class="tb">Switch = one hard cut</text>
+  <text x="290" y="50" class="t">Mainline influence 1 → 0, Siding 0 → 1,</text>
+  <text x="290" y="66" class="t">keyed with CONSTANT interpolation at the</text>
+  <text x="290" y="82" class="t">switch frame (EXTREME key + marker).</text>
+  <text x="290" y="104" class="ts">No pop, because Siding's offset already matches</text>
+  <text x="290" y="118" class="ts">the object's real position.</text>
+</svg>
+<figcaption><b>Figure 2.10</b> Influence switching. Held curves have their offset recomputed every tick from the object's world position (“shadow tracking”), so whichever one is switched to is already in the right place.</figcaption>
+</figure>
+
+<h2>2.12 Pivots and wagons: derived points</h2>
+<p>A pivot (a bogie, pony truck and so on) isn't dragged by the user. The add-on <b>derives</b> it from the root: “the same curve, N metres ahead or behind.” Because offset_factor is distance ÷ length, that is one line of arithmetic, and the pivot gets its <i>own</i> Follow Path so it takes the curve's heading and tilt at <i>its</i> spot:</p>
+<figure>
+<svg viewBox="0 0 700 230">
+  <path d="M20 190 C 200 190, 330 60, 680 50" fill="none" stroke="#2a5d9f" stroke-width="3"/>
+  <circle cx="300" cy="104" r="8" fill="#1d232b"/><text x="270" y="130" class="t">root 0.420</text>
+  <rect x="440" y="58" width="16" height="16" fill="none" stroke="#c07a12" stroke-width="2.5"/><text x="430" y="50" class="t" fill="#c07a12">pivot +4 m → 0.420 + 4/80 = 0.470</text>
+  <rect x="172" y="160" width="16" height="16" fill="none" stroke="#c07a12" stroke-width="2.5"/><text x="120" y="210" class="t" fill="#c07a12">pivot −4 m → 0.370</text>
+  <line x1="300" y1="104" x2="448" y2="66" stroke="#c07a12" stroke-dasharray="2 3"/>
+  <line x1="300" y1="104" x2="180" y2="168" stroke="#c07a12" stroke-dasharray="2 3"/>
+  <text x="470" y="150" class="ts">(curve length 80 m in this example)</text>
+  <text x="470" y="170" class="ts">Distance is held along the <tspan font-weight="bold">rail</tspan>,</text>
+  <text x="470" y="184" class="ts">not in a straight line, so the wheelbase</text>
+  <text x="470" y="198" class="ts">stays true through the bend.</text>
+</svg>
+<figcaption><b>Figure 2.11</b> <code>_track_it_sync_vehicle_pivots</code>. When the result falls past 0 or 1 it is clamped to the end of the root's curve today. Wagons avoid that by looking up the <b>route history</b> (Parts 5 and 8).</figcaption>
+</figure>
+
+<h2>2.13 One frame, start to finish</h2>
+<p>When the playhead moves, or you drag the slider, Blender and Track It take turns. Knowing this order explains most “why is it one frame behind” puzzles:</p>
+<figure>
+<svg viewBox="0 0 700 300">
+  <defs><marker id="af" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10z" fill="#5b6673"/></marker></defs>
+  <g>
+    <rect x="10" y="10" width="160" height="56" rx="6" fill="#f4f6f9" stroke="#d5dbe2"/><text x="20" y="32" class="tb">① Trigger</text><text x="20" y="50" class="ts">frame change · slider · edit</text>
+    <rect x="190" y="10" width="160" height="56" rx="6" fill="#e3ecf8" stroke="#b9cde8"/><text x="200" y="32" class="tb">② Animation</text><text x="200" y="50" class="ts">F-curves write offset/influence</text>
+    <rect x="370" y="10" width="160" height="56" rx="6" fill="#e3ecf8" stroke="#b9cde8"/><text x="380" y="32" class="tb">③ Depsgraph</text><text x="380" y="50" class="ts">constraints evaluate → matrix</text>
+    <rect x="550" y="10" width="140" height="56" rx="6" fill="#fbf1df" stroke="#ecd3a6"/><text x="560" y="32" class="tb">④ Handlers</text><text x="560" y="50" class="ts">Track It Python runs</text>
+    <line x1="170" y1="38" x2="188" y2="38" stroke="#5b6673" marker-end="url(#af)"/>
+    <line x1="350" y1="38" x2="368" y2="38" stroke="#5b6673" marker-end="url(#af)"/>
+    <line x1="530" y1="38" x2="548" y2="38" stroke="#5b6673" marker-end="url(#af)"/>
+  </g>
+  <rect x="370" y="90" width="320" height="150" rx="6" fill="#fff" stroke="#c07a12"/>
+  <text x="382" y="110" class="tb">Inside ④ (today)</text>
+  <g class="ts"><text x="382" y="128">switch_detect: read evaluated position (post-constraint)</text>
+  <text x="382" y="143">  → rewrite every held curve's offset (shadow tracking)</text>
+  <text x="382" y="158">  → scan other curves → create influence-0 constraints</text>
+  <text x="382" y="173">vehicle_pivot: pivots ← root offset ± d/L</text>
+  <text x="382" y="188">  → odometer + history → wagons ← resolved route</text>
+  <text x="382" y="208" fill="#b3372f">these writes dirty the depsgraph again →</text>
+  <text x="382" y="222" fill="#b3372f">③ runs again (a second pass per tick)</text></g>
+  <path d="M380 240 C 330 280, 250 280, 440 68" fill="none" stroke="#b3372f" stroke-dasharray="5 4" marker-end="url(#af)"/>
+  <rect x="10" y="90" width="340" height="150" rx="6" fill="#e4f3ea" stroke="#b7dcc5"/>
+  <text x="22" y="110" class="tb">Proposed order (Part 7)</text>
+  <g class="ts"><text x="22" y="128">frame_change_PRE: resolve route distance → curve +</text>
+  <text x="22" y="143">  offset for EVERY vehicle, pivot and wagon, before</text>
+  <text x="22" y="158">  the depsgraph evaluates → one clean pass, and it</text>
+  <text x="22" y="173">  works in renders and with nothing selected.</text>
+  <text x="22" y="193">Drag/UI: do the work inside the operator/callback,</text>
+  <text x="22" y="208">  never in a handler during a modal transform.</text></g>
+  <text x="10" y="290" class="ts">The “one tick stale” bug (matrix_world lagging a fresh offset write) is this ordering. The slider code forces view_layer.update() to get around it.</text>
+</svg>
+<figcaption><b>Figure 2.12</b> Evaluation order today vs proposed.</figcaption>
+</figure>
+
+<h2>2.14 Rules of thumb for track curves</h2>
+<table>
+  <thead><tr><th style="width:34%">Rule</th><th>Why</th></tr></thead>
+  <tbody>
+    <tr><td>One spline per curve object</td><td>Follow Path reads only <code>splines[0]</code>. A branch is a separate object.</td></tr>
+    <tr><td>Bézier, resolution_u ≥ 12</td><td>Blender follows the polyline, so low resolution gives corners (Fig. 2.4).</td></tr>
+    <tr><td>Twist method Z-Up, banking by tilt</td><td>Stable “up”; superelevation is explicit and keyframe-free.</td></tr>
+    <tr><td>Apply scale on track objects</td><td>Non-uniform object scale distorts lengths and tilt. Keep scale (1,1,1).</td></tr>
+    <tr><td>Real switches need real overlap</td><td>The overlap span must be at least as long as the vehicle's longest pivot offset, and longer for trains (Part 5).</td></tr>
+    <tr><td>Plain joints: endpoints touching</td><td>End-to-end pieces with only one way on can be short and modular.</td></tr>
+    <tr><td>Don't flip direction on used track</td><td>Keyframed factors would run backwards (Fig. 2.8).</td></tr>
+    <tr><td>Keep “Curve Radius” off on constraints</td><td>Otherwise the point radius scales the train.</td></tr>
+  </tbody>
+</table>
+<div class="callout c-idea"><div class="tag">Summary in one sentence</div>
+<p>A track is a single spline. Follow Path turns a <b>0–1 distance fraction</b> into a position and an orientation. Track It's whole job is to <b>choose that fraction</b> (Attach, Drag), <b>choose which curve's fraction counts</b> (influence switching), and <b>derive the fractions of everything that rides along</b> (pivots, wagons).</p></div>
+</body></html>

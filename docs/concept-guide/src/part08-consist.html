@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Part 8 · Consist system</title>
+<link rel="stylesheet" href="style.css"></head>
+<body data-footer="Part 8 · Consist system">
+
+<div class="opener">
+  <div class="part-kicker">Part 8</div>
+  <h1 class="part-title">Consist system</h1>
+  <p class="part-lede">Trains made of real vehicles: built from the library, spaced by their couplers, driven from any car, split and joined on the timeline, and pushed backwards into sidings without any special cases.</p>
+</div>
+<div class="toc-part">
+  <div>8.1 What the prototype does</div><div>8.2 Target consist model</div>
+  <div>8.3 Spacing maths</div><div>8.4 Coupling and uncoupling</div>
+  <div>8.5 Driving from any car</div><div>8.6 Train Builder UI</div>
+</div>
+
+<h2>8.1 What the prototype does</h2>
+<div class="callout c-now"><div class="tag">Current state (latest source)</div>
+<ul>
+  <li><b>Consist</b> box: wagon list with <b>+/−</b>. Each wagon is a <code>copy()</code> of the root with its own Follow Path. Its offset is the gap to the car ahead (default copied from the previous wagon).</li>
+  <li><b>Wagon Data</b>: a <code>vehicle_root</code> field stub (“library not built yet, always clones the root”).</li>
+  <li>The root keeps a <b>cumulative route distance</b> and a <b>history log</b> of curve changes (<code>distance, from/to curve, offsets, direction</code>). Junctions are solved geometrically so spacing doesn't drift by a metre at each switch.</li>
+  <li>A trailing wagon that reaches a fork first (for example when reversing) decides it itself and writes it to the shared log.</li>
+  <li><b>Fix Train</b> reruns the sync three times. It also runs automatically when the Drag Slider goes idle. <b>Consist Debug</b> lists the log.</li>
+</ul></div>
+<p>This is the right <i>idea</i> (distance-based, shared history, whichever end leads decides). Part 5's occupied path is the same idea with the history replaced by turnout states, which removes the dedupe/prune machinery. The prototype is a good test bed for checking the new evaluator: both should put every wagon in the same place on the same test scenes.</p>
+
+<h2>8.2 Target consist model</h2>
+<figure>
+<svg viewBox="0 0 700 230">
+  <path d="M10 160 L 690 160" stroke="#2a5d9f" stroke-width="3"/>
+  <!-- vehicles -->
+  <g>
+    <rect x="470" y="128" width="130" height="26" rx="4" fill="#1d232b"/><text x="495" y="146" class="tw">2-4-2 loco</text>
+    <rect x="340" y="132" width="110" height="22" rx="4" fill="#5b6673"/><text x="370" y="147" class="tw">tender</text>
+    <rect x="190" y="132" width="130" height="22" rx="4" fill="#5b6673"/><text x="225" y="147" class="tw">coach A</text>
+    <rect x="40" y="132" width="130" height="22" rx="4" fill="#5b6673"/><text x="75" y="147" class="tw">coach B</text>
+  </g>
+  <g fill="#c07a12"><circle cx="490" cy="160" r="4"/><circle cx="525" cy="160" r="5"/><circle cx="548" cy="160" r="5"/><circle cx="585" cy="160" r="4"/>
+  <circle cx="360" cy="160" r="4"/><circle cx="430" cy="160" r="4"/><circle cx="210" cy="160" r="4"/><circle cx="300" cy="160" r="4"/><circle cx="60" cy="160" r="4"/><circle cx="150" cy="160" r="4"/></g>
+  <!-- gaps -->
+  <g class="ts"><text x="452" y="122">gap 0.3</text><text x="318" y="122">gap 0.5</text><text x="168" y="122">gap 0.5</text></g>
+  <text x="600" y="120" class="ts">member 0 (anchor)</text>
+  <!-- list -->
+  <rect x="10" y="10" width="420" height="92" rx="6" fill="#f4f6f9" stroke="#d5dbe2"/>
+  <text x="22" y="30" class="tb">consist “Branch Line Local”</text>
+  <g class="mono" fill="#1d232b"><text x="22" y="48">#  vehicle      def            gap   facing coupled</text>
+  <text x="22" y="62">0  Loco.001     242T_Proto      —      +1     —</text>
+  <text x="22" y="76">1  Tender.001   Tender_2Bogie  0.30   +1     ✓</text>
+  <text x="22" y="90">2  CoachA       Coach_18m      0.50   +1     ✓   …</text></g>
+  <text x="460" y="30" class="t">distance = the Motion channel</text>
+  <text x="460" y="48" class="ts">keyed on the consist, not on a car</text>
+  <text x="10" y="200" class="t">Every member is a full vehicle (own root, pivots, rig). The tender is its own vehicle, coupled with gap ≈ 0 by a drawbar.</text>
+</svg>
+<figcaption><b>Figure 8.1</b> A consist is an ordered list of vehicle instances plus one distance channel.</figcaption>
+</figure>
+
+<h2>8.3 Spacing maths</h2>
+<p>With each vehicle's root at its centre and coupler distances in its definition (Part 6 §6.3), the reference distance of member <i>k</i> behind the anchor is:</p>
+<pre>d(0) = consist.distance
+d(k) = d(k−1) − [ rear_coupler(k−1) + gap(k) + front_coupler(k) ]       (facing −1 swaps front/rear)
+
+pivot point of member k:   d(k) + facing(k) × pivot.offset</pre>
+<figure>
+<svg viewBox="0 0 700 150">
+  <line x1="20" y1="100" x2="680" y2="100" stroke="#2a5d9f" stroke-width="3"/>
+  <rect x="380" y="70" width="240" height="26" rx="4" fill="#1d232b" opacity=".85"/>
+  <rect x="100" y="70" width="250" height="26" rx="4" fill="#5b6673" opacity=".85"/>
+  <circle cx="500" cy="100" r="6" fill="#2f7d4f"/><text x="480" y="125" class="ts">d(k−1)</text>
+  <circle cx="225" cy="100" r="6" fill="#2f7d4f"/><text x="210" y="125" class="ts">d(k)</text>
+  <g class="ts"><line x1="500" y1="55" x2="380" y2="55" stroke="#1d232b"/><text x="410" y="48">rear_coupler(k−1)</text>
+  <line x1="380" y1="40" x2="350" y2="40" stroke="#c07a12" stroke-width="2"/><text x="330" y="32" fill="#c07a12">gap</text>
+  <line x1="350" y1="55" x2="225" y2="55" stroke="#1d232b"/><text x="250" y="48">front_coupler(k)</text></g>
+</svg>
+<figcaption><b>Figure 8.2</b> Spacing is measured <b>along the route</b>, so cars stay correctly spaced through curves and switches.</figcaption>
+</figure>
+
+<h2>8.4 Coupling and uncoupling</h2>
+<p>From session 5: “If the user uncouples, the cars stay on the curve but don't react to dragging… maybe a decouple mode lets the drag slider on a car's own root work on its own.” As an animatable design:</p>
+<table>
+  <thead><tr><th style="width:22%">Operation</th><th>What the add-on does</th></tr></thead>
+  <tbody>
+    <tr><td><b>Uncouple at frame F</b> (between member k−1 and k)</td><td>Creates consist <i>B</i> from members k… Its distance channel is keyed at F to the exact value that keeps each car where it is, then held flat (the cars stand still). Consist A keeps members 0…k−1. From F onwards the two move independently. Before F, the pipeline still treats them as one train (a “split event” stored on A: <code>split_frame</code>, <code>child_consist</code>).</td></tr>
+    <tr><td><b>Couple at frame F</b></td><td>Use <b>Arrive At</b> to bring the couplers together, then Couple. From F, B's members are appended to A with the measured gap, and B's distance channel is ignored after F.</td></tr>
+    <tr><td><b>Drag an uncoupled car</b></td><td>Selecting any car of B drives B. It has its own Drag Slider target, which is exactly the “decouple mode” idea.</td></tr>
+    <tr><td><b>Run-round / shunting</b></td><td>Just sequences of the above, with turnout keys (Part 5). The loco uncouples, runs round via the loop, and couples to the other end: facing is unchanged, but it becomes member 0 of a re-ordered list.</td></tr>
+  </tbody>
+</table>
+<div class="callout c-decide"><div class="tag">Decision</div>
+<p>Should split and join be <b>timeline events</b> (so scrubbing before F shows the joined train) or <b>destructive edits</b> (make two consists and animate each)? Recommendation: <b>timeline events</b>. Shunting scenes are the main reason to build consists, and they need to scrub correctly.</p></div>
+
+<h2>8.5 Driving from any car</h2>
+<ul>
+  <li>The Drive box acts on <b>the consist of the selected object</b>, whether that is a loco, wagon, rig bone or mesh. The add-on walks up from any selected part to its vehicle, then its consist.</li>
+  <li>Pushing (the loco at the back) needs nothing special: when distance decreases, the leading end is the rear member (Part 5).</li>
+  <li><b>No collisions.</b> As agreed in session 5, running a train into itself or another train just clips. An optional overlay can flag overlap between consists on the same path segment in red, as a hint rather than a barrier.</li>
+</ul>
+
+<h2>8.6 Train Builder UI</h2>
+<figure>
+<svg viewBox="0 0 700 300">
+  <rect x="10" y="10" width="330" height="280" rx="8" fill="#2b2f36"/>
+  <text x="24" y="32" fill="#e8ecf1" font-size="12" font-weight="bold">▼ Consist: Branch Line Local</text>
+  <rect x="24" y="44" width="302" height="118" rx="4" fill="#1f2328"/>
+  <g font-size="10.5" fill="#d6dce4">
+    <rect x="28" y="48" width="294" height="24" fill="#3d5a80"/>
+    <text x="34" y="64">0 ▣ Loco.001 (242T_Proto)        ⇄  ●</text>
+    <text x="34" y="88">1 ▣ Tender.001        gap 0.30  ⇄  ✓</text>
+    <text x="34" y="112">2 ▣ CoachA            gap 0.50  ⇄  ✓</text>
+    <text x="34" y="136">3 ▣ CoachB            gap 0.50  ⇄  ✓</text>
+  </g>
+  <g font-size="10.5" fill="#d6dce4">
+    <rect x="24" y="170" width="95" height="22" rx="3" fill="#44494f"/><text x="32" y="185">+ From Library</text>
+    <rect x="125" y="170" width="70" height="22" rx="3" fill="#44494f"/><text x="136" y="185">Duplicate</text>
+    <rect x="201" y="170" width="60" height="22" rx="3" fill="#44494f"/><text x="212" y="185">Remove</text>
+    <rect x="267" y="170" width="59" height="22" rx="3" fill="#44494f"/><text x="276" y="185">↑ ↓</text>
+    <rect x="24" y="200" width="150" height="22" rx="3" fill="#44494f"/><text x="32" y="215">✂ Uncouple here (F)</text>
+    <rect x="180" y="200" width="146" height="22" rx="3" fill="#44494f"/><text x="188" y="215">✓ Couple (F)</text>
+    <text x="24" y="244">Length 71.6 m · 4 vehicles · 16 axles</text>
+    <text x="24" y="262">Anchor: member 0 · distance 312.40 m</text>
+    <text x="24" y="280">▶ Member Data  (facing, def, rig, wheels)</text>
+  </g>
+  <g class="t">
+    <text x="360" y="40">⇄ flips a vehicle's facing (runs backwards)</text>
+    <text x="360" y="62">✓ = coupled to the car ahead (keyed state)</text>
+    <text x="360" y="84">“From Library” opens the Asset Browser, filtered</text>
+    <text x="360" y="100">  to Track It vehicles (Part 9)</text>
+    <text x="360" y="122">Row order = train order; drag to reorder</text>
+    <text x="360" y="144">The prototype's clone-the-root behaviour stays</text>
+    <text x="360" y="160">  as “Duplicate” for quick proxies</text>
+    <text x="360" y="190" class="ts">Members are linked library overrides or local copies,</text>
+    <text x="360" y="206" class="ts">so ten identical coaches share one mesh and rig.</text>
+  </g>
+</svg>
+<figcaption><b>Figure 8.3</b> Mock-up of the finished Consist box (not built).</figcaption>
+</figure>
+</body></html>
